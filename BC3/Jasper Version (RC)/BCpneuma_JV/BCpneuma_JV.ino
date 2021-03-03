@@ -23,18 +23,23 @@
 #define blowerRelay           50
 #define PRESSURE_TOLERANCE 0.5//psi
 #define MAXPRESSURE 14.5
-                                        //SEE NOTES FOR A2-A3 SWAP
+                                        
+//******************************************************CONFIGURATION******************************************************
 static int numValveChan = numChan-2;
-static int pSensPins[numChan-2]           = {A0, A1, A3, A3, A4, A5, A6, A7, A8};  // A9, A10, A11,  A12,  A13,  A14,  A15};
-static unsigned int pValvePins[numChan-2] = {22, 24, 26, 28, 30, 32, 34, 36, 38};  // 40, 42,  44,   46,   48,   50,   52};
-static unsigned int vValvePins[numChan-2] = {23, 25, 27, 29, 31, 33, 35, 37, 39};  // 41, 43,  45,   47,   49,   51,   53};
+static int pSensPins[numChan-2]           = {A0, A1, A3, A3, A4, A5, A6, A7, A8}; //SEE NOTES FOR A3 SWAP
+static unsigned int pValvePins[numChan-2] = {22, 24, 26, 28, 30, 32, 34, 36, 38}; 
+static unsigned int vValvePins[numChan-2] = {23, 25, 27, 29, 31, 33, 35, 37, 39}; 
 static unsigned int masterPressurePins[2] = {42, 45};
 static unsigned int masterVacuumPins[2]   = {44, 43};
+//*************************************************************************************************************************
 
+// Initialize the state arrays
 int currentPressures[numChan-2] =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
 int targetPressures[numChan-2]  =           {1,  1,  1,  1,  1,  1,  1,  1,  1};
 bool servoOverride[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
 int pressureErrors[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
+
+// Initialize the input and output data
 uint8_t data[numChan]           =                       {0,0,0,0,0,0,0,0,0,0,0};
 uint8_t LEDdata[numChan-2]      =                           {0,0,0,0,0,0,0,0,0};
 
