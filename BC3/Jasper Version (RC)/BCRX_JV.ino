@@ -6,11 +6,11 @@
 #include <RHReliableDatagram.h>
 #include <RH_RF95.h>
 #include <SPI.h>
-                       //BC#: 4  3
-#define TX_ADDRESS      7 //: 7  9
-#define RX_ADDRESS      8 //: 8 10
 
-#define RFM95_RST     2  // "A"
+#define TX_ADDRESS      5
+#define RX_ADDRESS      6
+
+#define RFM95_RST     2
 
 #define LED           9
 #define LED_GREEN_1   6
@@ -44,6 +44,8 @@ void setup() {
     Serial.print("Receiving transmissions at RX_ADDRESS: "); Serial.println(RX_ADDRESS);
     Serial.print("From TX_ADDRESS: "); Serial.println(TX_ADDRESS); Serial.println();
     digitalWrite(LED_GREEN_2, HIGH); 
+
+    // Speed and Range tuning
     radioManager.setTimeout(30);
     radioManager.setRetries(0);
     driver.setTxPower(19,true);
@@ -84,12 +86,12 @@ void loop(){
 }
 
 void LEDread(int howmany){  // CALLED WHEN I2C MESSAGE ARRIVES from BC
-  for (int i = 0; i < howmany; i++) {
+  for (int i = 0; i < howmany; i++) { // Reads wire into LEDdata piecemeal
     LEDdata[i] = Wire.read();
   }
 }
 
-void blinker(byte pin){
+void blinker(byte pin){ // blink an led
   digitalWrite(pin, HIGH);
   delay(10);
   digitalWrite(pin, LOW);
