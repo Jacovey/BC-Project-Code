@@ -2,11 +2,8 @@
 Border Crosser Project Code
 
 LoRa Adressing:
-
 BC# : 1 2 3 4  5 
-
 TX  : 1 3 5 7  9
-
 RX  : 2 4 6 8 10
 
 All possible TX pins:
