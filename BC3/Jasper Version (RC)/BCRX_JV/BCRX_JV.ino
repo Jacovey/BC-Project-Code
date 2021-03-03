@@ -44,9 +44,8 @@ void setup() {
 
   //Set the config of the LoRa driver and manager
   driver.setFrequency(915.0);
-  driver.setTxPower(19,true);
-  radioManager.setTimeout(30);
-  radioManager.setRetries(0);
+  driver.setTxPower(23,false);
+  radioManager.setTimeout(100);
 
   //Check if LoRa failed to initialize
   if (!radioManager.init()) {
@@ -71,18 +70,17 @@ void loop(){
     
     // get that packet, store in buf
     if (radioManager.recvfromAck(buf, &len, &from)){
-      delay(20);// Give it a sec
-      //Attempt to respond with current LED data
-      if (!radioManager.sendtoWait(LEDdata, sizeof(LEDdata), TX_ADDRESS)) {
-         blinker(LED_RED_1);
-      }
-      
       //print out the received info in buffer
       for (int i=0; i<len;i++){
         Serial.print(buf[i]); Serial.print(" ");
       }
       Serial.println();
 
+      //Attempt to respond with current LED data
+      if (!radioManager.sendtoWait(LEDdata, sizeof(LEDdata), TX_ADDRESS)) {
+         blinker(LED_RED_1);
+      }
+      
       //pass on buf to the pneuma mega
       Wire.beginTransmission(1);
       Wire.write(buf, len);

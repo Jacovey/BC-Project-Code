@@ -33,10 +33,10 @@ bool debug = false;
 // ******************* CONFIGURATION *********************************************************************************
 const uint8_t potPINS[numChan - 2] =   { 54,  55, 56, 57, 58, 59, 60, 61, 62};
                                                                          //32 and up are pump/master valve
-const uint8_t vSwitchPins[numChan] =   { 12, 10, 9, 7, 5, 14, 16, 20, 22, 35, 33};
-const uint8_t pSwitchPins[numChan] =   { 13, 11, 8, 6, 4, 15, 17, 21, 23, 34, 32};
+const uint8_t vSwitchPins[numChan] =   { 12, 10, 9, 7, 5, 14, 16, 18, 20, 35, 33};
+const uint8_t pSwitchPins[numChan] =   { 13, 11, 8, 6, 4, 15, 17, 19, 21, 34, 32};
 
-const uint8_t LEDpins[numChan - 2] =   { 48,  49, 47, 46, 45, 44, 43, 41, 40};
+const uint8_t LEDpins[numChan - 2] =   { 48,  49, 47, 46, 45, 44, 43, 42, 41};
 // *******************************************************************************************************************
 //                         Channel Format
 // Channel:  1  2  3  4  5  6  7  8    9   10
@@ -77,9 +77,8 @@ void setup() {
 
   // Config the LoRa driver and manager
   driver.setFrequency(915.0);
-  driver.setTxPower(19,true);
-  radioManager.setTimeout(30);
-  radioManager.setRetries(0);
+  driver.setTxPower(23,false);
+  radioManager.setTimeout(100);
 
   // See if LoRa init correctly
   if (!radioManager.init()) {
@@ -148,7 +147,7 @@ void radioTransmitter() {
     uint8_t from;
     
     // Now attempt to pickup a reply from the receiver
-    if (radioManager.recvfromAckTimeout(buf, &len, 2000, &from)) {
+    if (radioManager.recvfromAckTimeout(buf, &len, 500, &from)) {
       //if received and debug is on, print out the command
       if (debug){
         for (int i = 0; i < numChan-2; i++) {
