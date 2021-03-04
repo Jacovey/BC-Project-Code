@@ -1,16 +1,24 @@
 // LoRa transmitter
 
+//BC4 Transmitter code
+
 #include <RadioHead.h>
 #include <RHReliableDatagram.h>
 #include <RH_RF95.h>
 #include <SPI.h>
 
 // Number of TOTAL RC channels
-#define numChan      11 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
+#define numChan      13 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
 
 // Lora Adressing
 #define TX_ADDRESS      7
 #define RX_ADDRESS      8
+
+// LoRa Software Setup
+#define TX_POWER 23
+#define RFM95_FREQ 915.0
+#define TX_TIMEOUT 30
+#define TX_RETRIES 1
 
 // LoRa hardware setup
 #define RFM95_CS        53 // Chip/Slave Select pin
@@ -31,16 +39,16 @@ uint8_t data[numChan];
 bool debug = false;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numChan - 2] =   { 54,  55, 56, 57, 58, 59, 60, 61, 62};
+const uint8_t potPINS[numChan - 2] =   { 54,  55, 56, 57, 58, 59, 60, 61, 62, 63};
                                                                          //32 and up are pump/master valve
-const uint8_t vSwitchPins[numChan] =   { 12, 10, 9, 7, 5, 14, 16, 20, 22, 35, 33};
-const uint8_t pSwitchPins[numChan] =   { 13, 11, 8, 6, 4, 15, 17, 21, 23, 34, 32};
+const uint8_t vSwitchPins[numChan] =   { 12, 10, 9, 7, 5, 14, 16, 20, 22, 25, 26, 35, 33};
+const uint8_t pSwitchPins[numChan] =   { 13, 11, 8, 6, 4, 15, 17, 21, 23, 24, 27, 34, 32};
 
-const uint8_t LEDpins[numChan - 2] =   { 48,  49, 47, 46, 45, 44, 43, 41, 40};
+const uint8_t LEDpins[numChan - 2] =   { 48,  49, 47, 46, 45, 44, 43, 41, 40, 39, 38};
 // *******************************************************************************************************************
 //                         Channel Format
-// Channel:  1  2  3  4  5  6  7  8    9   10
-//    Link: L1 L2 L3 L4 SP AR BA PG BLWR MAST
+// Channel:  1  2  3  4  5  6  7  8 9 10 11   12   13
+//    Link: L1 L2 L3 L4 SP AR BA PG C  H  T BLWR MAST
 // *******************************************************************************************************************
 
 
@@ -76,10 +84,10 @@ void setup() {
   Serial.begin(9600);
 
   // Config the LoRa driver and manager
-  driver.setFrequency(915.0);
-  driver.setTxPower(19,true);
-  radioManager.setTimeout(30);
-  radioManager.setRetries(0);
+  driver.setFrequency(RFM95_FREQ);
+  driver.setTxPower(TX_POWER,false);
+  radioManager.setTimeout(TX_TIMEOUT);
+  radioManager.setRetries(TX_RETRIES);
 
   // See if LoRa init correctly
   if (!radioManager.init()) {
@@ -149,7 +157,7 @@ void radioTransmitter() {
     
     // Now attempt to pickup a reply from the receiver
     if (radioManager.recvfromAckTimeout(buf, &len, 2000, &from)) {
-      //if received and debug is on, print out the command
+      //if received and debug is on, print out the LED command
       if (debug){
         for (int i = 0; i < numChan-2; i++) {
           Serial.print(buf[i]);

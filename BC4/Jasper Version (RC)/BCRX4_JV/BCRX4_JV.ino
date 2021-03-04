@@ -1,5 +1,7 @@
 // LoRa receiver/server, i2c master
 
+//BC4 Receiver Code
+
 #include <RadioHead.h> 
 #include <Wire.h>
 #include <RHReliableDatagram.h>
@@ -9,6 +11,12 @@
 // LoRa Adressing
 #define TX_ADDRESS      7
 #define RX_ADDRESS      8
+
+// LoRa Software Setup
+#define TX_POWER 23
+#define RFM95_FREQ 915.0
+#define TX_TIMEOUT 30
+#define TX_RETRIES 1
 
 // Define the interupt pin for the LoRa
 #define RFM95_RST     2
@@ -43,10 +51,10 @@ void setup() {
   Wire.onReceive(LEDread);
 
   //Set the config of the LoRa driver and manager
-  driver.setFrequency(915.0);
-  driver.setTxPower(19,true);
-  radioManager.setTimeout(30);
-  radioManager.setRetries(0);
+  driver.setFrequency(RFM95_FREQ);
+  driver.setTxPower(TX_POWER,false);
+  radioManager.setTimeout(TX_TIMEOUT);
+  radioManager.setRetries(TX_RETRIES);
 
   //Check if LoRa failed to initialize
   if (!radioManager.init()) {

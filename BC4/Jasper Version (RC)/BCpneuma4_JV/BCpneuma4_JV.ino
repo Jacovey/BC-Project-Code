@@ -2,43 +2,44 @@
 #include <Servo.h>
 
 // i2c slave (address 1) receiving input from nano/LoRa radio (address 2)
+// BC4 Pneumatic Shield Controller
 
 /*
  RC-STYLE MULTICHANNEL IMPLEMENTATION
 
- CONTROL MAPPING FOR 3:
- ORDER    : L1 L2 L3 L4  S  A  C  P  B  BL  MA
- Channel  :  1  2  3  4  5  6  7  8  9  10  11
- Paddress : 22 24 26 28 30 32 34 36 38  50  42/45
- Vaddress : 23 25 27 29 31 33 35 37 39 N/A  44/43
- Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8
+ CONTROL MAPPING FOR 4:
+ ORDER    : L1 L2 L3 L4  S  A  C  P  B  H   T BL  MA
+ Channel  :  1  2  3  4  5  6  7  8  9 10  11 12  13
+ Paddress : 22 24 26 28 30 32 34 36 38 40  42 50  42/45
+ Vaddress : 23 25 27 29 31 33 35 37 39 41  43     44/43
+ Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10
 
- NOTES FOR BC4: none so far!
+ NOTES FOR BC4: has two "extra" channels for Heels and Top, neither have feedback properly connected
 */
 
-#define numChan 11
+#define numChan 13
 #define blowerRelay           50
 #define PRESSURE_TOLERANCE 0.5//psi
 #define MAXPRESSURE 14.5
 
 //******************************************************CONFIGURATION******************************************************
-static int pSensPins[numChan-2]           = {A0, A1, A2, A3, A4, A5, A6, A7, A8};
-static unsigned int pValvePins[numChan-2] = {22, 24, 26, 28, 30, 32, 34, 36, 38};
-static unsigned int vValvePins[numChan-2] = {23, 25, 27, 29, 31, 33, 35, 37, 39};
+static int pSensPins[numChan-2]           = {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10};
+static unsigned int pValvePins[numChan-2] = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 46};
+static unsigned int vValvePins[numChan-2] = {23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 47};
 static unsigned int masterPressurePins[2] = {42, 45};
 static unsigned int masterVacuumPins[2]   = {44, 43};
 //*************************************************************************************************************************
 
 
 // Initialize the state arrays
-int currentPressures[numChan-2] =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
-int targetPressures[numChan-2]  =           {1,  1,  1,  1,  1,  1,  1,  1,  1};
-bool servoOverride[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
-int pressureErrors[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
+int currentPressures[numChan-2] =           {0,0,0,0,0,0,0,0,0,0,0};
+int targetPressures[numChan-2]  =           {1,1,1,1,1,1,1,1,1,1,1};
+bool servoOverride[numChan-2]   =           {0,0,0,0,0,0,0,0,0,0,0};
+int pressureErrors[numChan-2]   =           {0,0,0,0,0,0,0,0,0,0,0};
 
 // Initialize the input and output data
-uint8_t data[numChan]           =                       {0,0,0,0,0,0,0,0,0,0,0};
-uint8_t LEDdata[numChan-2]      =                           {0,0,0,0,0,0,0,0,0};
+uint8_t data[numChan]           =       {0,0,0,0,0,0,0,0,0,0,0,0,0};
+uint8_t LEDdata[numChan-2]      =           {0,0,0,0,0,0,0,0,0,0,0};
 
 void setup() {
   //Start Serial
@@ -145,6 +146,7 @@ void loop() {
 void handleValve(byte channel, byte state) {
   //KEY: 101 is "on"/"pressurize", 102 is "off"/"depressurize", 103 is a switch error, 104 is "idle"
   //     any other value is read as a value from 0-100 inclusive
+  //Note: Last two channels must be blower and master in that order
   
   // Blower Control
   if (channel == numChan-2){
