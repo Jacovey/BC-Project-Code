@@ -1,38 +1,37 @@
-// LoRa transmitter
+// Radio transmitter
 
 //BC4 Transmitter code
 
 #include <RadioHead.h>
 #include <RHReliableDatagram.h>
-#include <RH_RF95.h>
+#include <RH_NRF24.h>
 #include <SPI.h>
 
 // Number of TOTAL RC channels
 #define numChan      12 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
 
-// Lora Adressing
+// Radio Adressing
 #define TX_ADDRESS      7
 #define RX_ADDRESS      8
 
-// LoRa Software Setup
-#define TX_POWER 23
-#define RFM95_FREQ 915.0
-#define TX_TIMEOUT 100
-#define TX_RETRIES 0
+// Radio Software Setup
+#define CHANNEL 4
+#define TX_POWER RH_NRF24::TransmitPowerm18dBm
+#define DATARATE RH_NRF24::DataRate1Mbps
 
-// LoRa hardware setup
-#define RFM95_CS        53 // Chip/Slave Select pin
-#define RFM95_INT       2  // PinChangeInterrupt pin
+// Radio hardware setup
+#define NRF24_CS       53 // Chip/Slave Select pin
+#define NRF24_EN       2  // Enable pin
 
 // Control tuning values
 #define POT_DEADBAND   3
 
 //LoRa driver and manager setup
-RH_RF95 driver(RFM95_CS, RFM95_INT);
+RH_NRF24 driver(NRF24_EN, NRF24_CS);
 RHReliableDatagram radioManager(driver, TX_ADDRESS);
 
 //Initialize the input buffer and output data
-uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t data[numChan];
 
 //Init Debug
@@ -83,13 +82,7 @@ void setup() {
   // Init the Serial
   Serial.begin(9600);
 
-  // Config the LoRa driver and manager
-  driver.setFrequency(RFM95_FREQ);
-  driver.setTxPower(TX_POWER,false);
-  radioManager.setTimeout(TX_TIMEOUT);
-  //radioManager.setRetries(TX_RETRIES);
-
-  // See if LoRa init correctly
+  // See if radio init correctly
   if (!radioManager.init()) {
     Serial.println("TX init failed");
     while(1);
@@ -98,9 +91,12 @@ void setup() {
     Serial.println("TX radio initialized");
     Serial.print("Transmitting from address: "); Serial.println(TX_ADDRESS);
     Serial.print("to RX_ADDRESS: "); Serial.println(RX_ADDRESS);  Serial.println();
+    Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
+    driver.setChannel(CHANNEL);
+    driver.setRF(DATARATE, TX_POWER);
   }
   // communicate its ready and then chill for a bit
-  Serial.println("BCcontrollerTX_3 Ready.");
+  Serial.println("BCcontrollerTX_4 Ready.");
   Serial.println();
   delay(500);
 }
@@ -143,7 +139,7 @@ void loop() {
     LEDdisplay();
   }
 
-  // transmit and receive LoRa data and display data
+  // transmit and receive radio data and display data
   radioTransmitter();
   delay(50);
 }
@@ -156,7 +152,7 @@ void radioTransmitter() {
     uint8_t from;
     
     // Now attempt to pickup a reply from the receiver
-    /*if (radioManager.recvfromAckTimeout(buf, &len, 250, &from)) {
+    if (radioManager.recvfromAckTimeout(buf, &len, 250, &from)) {
       //if received and debug is on, print out the LED command
       if (debug){
         for (int i = 0; i < numChan-2; i++) {
@@ -166,7 +162,7 @@ void radioTransmitter() {
         Serial.println();
       }
     }
-    else{Serial.println("FAILED RESPONSE");}*/
+    else{Serial.println("FAILED RESPONSE");}
 
     // if debug is on, print out what the TX just tried to send
     if (debug){

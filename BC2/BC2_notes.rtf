@@ -1,0 +1,68 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1671\cocoasubrtf600
+{\fonttbl\f0\fnil\fcharset0 JetBrainsMono-Regular;\f1\fnil\fcharset0 Monaco;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww19860\viewh14620\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs36 \cf0 FROM \
+\
+
+\f1 Border Crosser 1:\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+\cf0 \
+TX: 5\
+RX: 6\
+\
+433MHz\
+\
+________________\
+\
+Munich activation order of Channel P/V pairs:\
+\
+11, 8, 4, 1, 	0, 	12, 7, 2, 6, 10, 3, 5, 9   14 15   16\
+|   |  |  |  |   |   |  |	|	|	|	|	|   |  |    |\
+(0	1	2	3	4	5	 6	7	8	9	10 11 12) BL  MV  WN\
+\
+\'97\'97\'97\'97\'97\'97\'97\'97\
+\\\\ CONTROLLER //\
+						WN\
+7	8	9	10	11	12	13\
+								BL	MV\
+0	1	2	3	4	5	6		14	15\
+\
+WINCH maps to pins 6 and 7 which are OPTO-22 SSRs as it was in Munich for WINCH IN and WINCH OUT.\
+\
+***BLOWER is toggled off with 14P (D50)\
+\
+\
+\
+in CONTROLLER code:\
+****\
+LEDs[12] = \{ 48,  49, 47, 46, 45, 44, 43,  42, 41, 40,  39,   38\}\
+***\
+switched PswitchPINS and VswitchPINS 16 and 17 & 24 and 25\
+***\
+bool blinkBuffer[12];     // add a 1 as index to make it's LED blink\
+****\
+  for (int i = 0; i < 3; i ++)\{\
+    pinMode(PswitchPINS[numOfServoChans+i], INPUT_PULLUP);\
+    pinMode(VswitchPINS[numOfServoChans+i], INPUT_PULLUP);\
+  \}\
+****	\
+WAS 10 and 12:\
+  for (int j = 14; j<16; j++)\{                    // joystick\
+    potReadings[j] = analogRead(potPINS[j])>>2;   // send 8 bit value, 0-255 \
+//    Serial.print(potReadings[j]); Serial.print(" ");\
+    preparePotMessage(j);\
+  \}\
+//  Serial.println();\
+\}\
+\
+\
+\
+			                                                            ***\
+SWITCH P an V\
+const uint8_t PswitchPINS[numOfServoChans+3] =    \{12,  10,  9, 7, 5, 14, 16,  18, 20, 22,  25,   26,   29,   31,   35,   33\};\
+const uint8_t VswitchPINS[numOfServoChans+3] =    \{13,  11,  8, 6, 4, 15, 17,  19, 21, 23,  24,   27,   28,   30,   34,   32\};\
+//   }
