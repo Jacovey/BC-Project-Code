@@ -8,14 +8,14 @@
 #include <SPI.h>
 
 // Number of TOTAL RC channels
-#define numChan      11 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
+#define numChan      12 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
 
 // Radio Adressing
 #define TX_ADDRESS      5
 #define RX_ADDRESS      6
 
 // Radio Software Setup
-#define CHANNEL 3
+#define CHANNEL 70
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm
 #define DATARATE RH_NRF24::DataRate1Mbps
 
@@ -35,19 +35,19 @@ uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t data[numChan];
 
 //Init Debug
-bool debug = false;
+bool debug = true;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numChan - 2] =   { 54,  55, 56, 57, 58, 59, 60, 61, 62};
+const uint8_t potPINS[numChan - 2] =   { 54,  55, 56, 57, 58, 59, 60, 61, 62, 63};
                                                                          //32 and up are pump/master valve
-const uint8_t vSwitchPins[numChan] =   { 12, 10, 9, 7, 5, 14, 16, 18, 20, 35, 33};
-const uint8_t pSwitchPins[numChan] =   { 13, 11, 8, 6, 4, 15, 17, 19, 21, 34, 32};
+const uint8_t vSwitchPins[numChan] =   { 12, 10, 9, 7, 5, 14, 16, 18, 20, 22, 35, 33};
+const uint8_t pSwitchPins[numChan] =   { 13, 11, 8, 6, 4, 15, 17, 19, 21, 23, 34, 32};
 
-const uint8_t LEDpins[numChan - 2] =   { 48,  49, 47, 46, 45, 44, 43, 42, 41};
+const uint8_t LEDpins[numChan - 2] =   { 48,  49, 47, 46, 45, 44, 43, 42, 41, 40};
 // *******************************************************************************************************************
 //                         Channel Format
-// Channel:  1  2  3  4  5  6  7  8    9   10
-//    Link: L1 L2 L3 L4 SP AR BA PG BLWR MAST
+// Channel:  1  2  3  4  5  6  7  8 9   10   11
+//    Link: L1 L2 L3 L4 SP AR BA PG T BLWR MAST
 // *******************************************************************************************************************
 
 
