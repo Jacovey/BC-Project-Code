@@ -18,7 +18,7 @@
 #define LED_RED_1     8
 #define LED_RED_2     9
 
-RH_RF95 driver;
+RH_RF95 driver(2, SS);
 RHReliableDatagram radioManager(driver, RX_ADDRESS);
 
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];

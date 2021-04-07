@@ -7,47 +7,44 @@
 /*
  RC-STYLE MULTICHANNEL IMPLEMENTATION
 
- CONTROL MAPPING FOR 3:
- ORDER    : L1 L2 L3 L4  S  A  C  P  B   T  BL  MA
- Channel  :  1  2  3  4  5  6  7  8  9  10  10  11
- Paddress : 22 24 26 28 30 32 34 38 36  46  50  42/45
- Vaddress : 23 25 27 29 31 33 35 39 37  41 N/A  44/43
- 
- Psensor  : A0 A1 A3    A4 A5 A6    A8
+ CONTROL MAPPING FOR 5:
+ ORDER    : L1 L2 L3 L4  S  A  C  P  B  R  BL    MA
+ Channel  :  1  2  3  4  5  6  7  8  9 10  11    12
+ Paddress : 22 24 26 28 30 32 34 36 38 40  50 42/45
+ Vaddress : 23 25 27 29 31 33 35 37 39 41 N/A 44/43
+ Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8
 
- NOTES FOR BC3: 
- 3/1/2020: No Feedback on pig or L4, A2 pressure sensors is dead, mapped L3 to A3 rather than A2
- 3/24/2020: pin 40 mosfet is dead
+ NOTES FOR BC5:
+
 */
 
 #define numChan 12
-#define blowerRelay           50
+#define numValveChan 9
+#define linearMotor           9
+#define blowerRelay           52
 #define PRESSURE_TOLERANCE 0.5//psi
-#define MAXLINKPRESSURE 5
 #define MAXPRESSURE 14.5
                                         
 //******************************************************CONFIGURATION******************************************************
 static int numValveChan = numChan-2;
-static int pSensPins[numChan-2]           = {A0, A1, A3, A3, A4, A5, A6, A7, A9, A8}; //SEE NOTES FOR A3 SWAP
-static unsigned int pValvePins[numChan-2] = {22, 24, 26, 28, 30, 32, 34, 38, 36, 46}; 
-static unsigned int vValvePins[numChan-2] = {23, 25, 27, 29, 31, 33, 35, 39, 37, 41}; 
+static int pSensPins[numChan-3]           = {A0, A1, A3, A3, A4, A5, A6, A7, A8, A9}; //SEE NOTES FOR A3 SWAP
+static unsigned int pValvePins[numChan-2] = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40}; 
+static unsigned int vValvePins[numChan-2] = {23, 25, 27, 29, 31, 33, 35, 37, 39, 41}; 
 static unsigned int masterPressurePins[2] = {42, 45};
 static unsigned int masterVacuumPins[2]   = {44, 43};
 //*************************************************************************************************************************
 
 // Initialize the state arrays
-float currentPressures[numChan-2] =           {0,  0,  0,  0,  0,  0,  0,  0,  0, 0};
-float targetPressures[numChan-2]  =           {1,  1,  1,  1,  1,  1,  1,  1,  1, 1};
-bool servoOverride[numChan-2]   =             {0,  0,  0,  0,  0,  0,  0,  0,  0, 0};
-float pressureErrors[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0, 0};
+int currentPressures[numChan-2] =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
+int targetPressures[numChan-2]  =           {1,  1,  1,  1,  1,  1,  1,  1,  1};
+bool servoOverride[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
+int pressureErrors[numChan-2]   =           {0,  0,  0,  0,  0,  0,  0,  0,  0};
 
 // Initialize the input and output data
-uint8_t data[numChan]           =                       {0,0,0,0,0,0,0,0,0,0,0,0};
-uint8_t LEDdata[numChan-2]      =                           {0,0,0,0,0,0,0,0,0,0};
+uint8_t data[numChan]           =                       {0,0,0,0,0,0,0,0,0,0,0};
+uint8_t LEDdata[numChan-2]      =                           {0,0,0,0,0,0,0,0,0};
 
-//Init the Master pressure control
-int mastState = 0; // State of the master pressure
-float mastPres = 0; // Master pressure
+bool debug = false;
 
 void setup() {
   //Start Serial
@@ -92,12 +89,11 @@ void receiveCommand(int howmany) {
  
 void loop() {
   static unsigned long last_display_time = 0; // to keep track of time since last display update
-  bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
-  bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
   for (int i = 0; i<numValveChan; i++) {
     //Pressure Sensor Interpreting
-    currentPressures[i] = readPress(i);
-    Serial.print(currentPressures[i]);Serial.print("|");
+    currentPressures[i] = analogRead(pSensPins[i]);
+    currentPressures[i] = constrain(currentPressures[i], 41, 962); // keeps in range of 0-MAXPRESSURE in PSI
+    currentPressures[i] = ((((currentPressures[i] / 1023. * 5.0) - 0.2 ) / 4.5 * 1023.) / (MAXPRESSURE * 70.551727)) * 127; //Returns 0-MAXPRESSURE
     
     //Handling Proportional Drive
     if (servoOverride[i] == 0) {  // if it's NOT in manual direct drive mode
@@ -110,13 +106,12 @@ void loop() {
         // if the pressure is within tolerance, make the LED green
         LEDdata[i] = 1;
       }
-      else if (pressureErrors[i] > 0 && mastPres>currentPressures[i]) { // PRESSURIZE  if the master pressure is higher than the link pressure
+      else if (pressureErrors[i] > 0) { // PRESSURIZE
         // stop flow out, start flow in
         digitalWrite(pValvePins[i], HIGH);
         digitalWrite(vValvePins[i], LOW);
         // if the pressure is outside of tolerance, make the LED red
         LEDdata[i] = 0;
-        pressFlag = true;
       }
       else if (pressureErrors[i] < 0) { // VENT
         // stop flow in, start flow out
@@ -124,82 +119,80 @@ void loop() {
         digitalWrite(vValvePins[i], HIGH);
         // if the pressure is outside of tolerance, make the LED red
         LEDdata[i] = 0;
-        //ventFlag = true; TEMP FOR INCOMPLETE VAC BUS
       }
     } 
     // Updating the LEDs for manual drive
     else{
       //get commanded state
       int state = data[i];
+
       // Update LED's based on condition
       // if manual idle, turn off light
       if (state == 104) LEDdata[i]=2; 
       // if the link is in manual pressurize, make the LED red until you get to max pressure, then blink green
-      else if (state == 102 && currentPressures[i]<MAXLINKPRESSURE-2*PRESSURE_TOLERANCE){ LEDdata[i]=0; pressFlag = true;}
-      else if (state == 102){                                                         LEDdata[i]=4; pressFlag = true;}
+      else if (state == 102 && currentPressures[i]<MAXPRESSURE-2*PRESSURE_TOLERANCE) LEDdata[i]=0; 
+      else if (state == 102)                                                         LEDdata[i]=4;
       // if the link is in manual vent, blink red
-      else if (state == 101){                                                         LEDdata[i]=3;}// ventFlag = true;} TEMP FOR INCOMPLETE VAC BUS
+      else if (state == 101)                                                         LEDdata[i]=3;
     }
-    
-    //TEMPORARY CODE FOR INCOMPLETE VACCUUM BUS IMPLEMENTATION: VACUUM BUS IS ONLY ON SPIRAL, ARCH, BANANA, CONE
-    if (data[4]==101 || data[5]==101 || data[6]==101 || data[8]==101){
-      ventFlag=true;
-    }
-  }
-  Serial.println();
-
-  //Master Pressure Control
-  //get pressure currently
-  mastPres = readPress(A14);
-  if  (mastState == 101){
-    //Serial.println("MASTER VACUUM ON");
-    digitalWrite(42,   LOW); // close pressure side
-    digitalWrite(43,   HIGH); // open idle outlet
-    digitalWrite(44,   HIGH); // open pump inlet
-    if(!ventFlag) digitalWrite(45, HIGH); // open atmo inlet if nothing is venting
-    else digitalWrite(45, LOW); // otherwise pull from links
-  }
-  else if (mastState == 102) {
-    //Serial.println("MASTER PRESSURE ON");
-    digitalWrite(42,   HIGH);// open pump outlet
-    digitalWrite(44,   HIGH);// open pump inlet
-    if(!ventFlag) digitalWrite(45, HIGH); // open atmo inlet if nothing is draining
-    else digitalWrite(45, LOW); // otherwise pull from links
-    if(mastPres > MAXPRESSURE) digitalWrite(43, HIGH); // open pressure to atmo if its too high
-    else digitalWrite(43, LOW); // otherwise keep that closed
-  }
-  else{
-    //if (mastState == 104) Serial.println("MASTER IDLE");
-    if (mastState == 103) Serial.println("ERROR:103, IDLING MASTER");
-    //CLOSE EVERYTHING
-    digitalWrite(42,   LOW);
-    digitalWrite(44,   LOW);
-    digitalWrite(45,   LOW);
-    digitalWrite(43,   LOW);
   }
   
   //DISPLAY UPDATER
   if ((millis() - last_display_time) > 100) { // update every tenth of a second
     last_display_time = millis(); // reset clock
+    
     //Send LED info
     Wire.beginTransmission(2);
     Wire.write(LEDdata, sizeof(LEDdata));
     Wire.endTransmission();
+
+    if (debug){// Debug data print
+      for (int i=0; i<numValveChan; i++){
+        Serial.print(data[i]);Serial.print("|");
+      }
+      Serial.println();
+    }
   }
 }
 
 void handleValve(byte channel, byte state) {
   //KEY: 101 is "on"/"pressurize", 102 is "off"/"depressurize", 103 is a switch error, 104 is "idle"
   //     any other value is read as a value from 0-100 inclusive
-  
+
+  //Rack Control
+  if (channel == numChan-3){
+    if  (state == 102) {analogWrite(linearMotor, 0);  if (debug) Serial.println("RACK IN");}
+    if  (state == 101) {analogWrite(linearMotor, 255); if (debug) Serial.println("RACK OUT");}
+  }
   // Blower Control
-  if (channel == numChan-2){
-    if  (state == 102) {digitalWrite(blowerRelay, LOW);  if (debug) //Serial.println("BLOWER OFF");}
-    if  (state == 101) {digitalWrite(blowerRelay, HIGH); if (debug) //Serial.println("BLOWER ON");}
+  else if (channel == numChan-2){
+    if  (state == 102) {digitalWrite(blowerRelay, LOW);  if (debug) Serial.println("BLOWER OFF");}
+    if  (state == 101) {digitalWrite(blowerRelay, HIGH); if (debug) Serial.println("BLOWER ON");}
   }
   // Master Pressure Control
   else if (channel == numChan-1){
-    mastState = state;
+    if  (state == 101){
+      if (debug) Serial.println("MASTER VACUUM ON");
+      for (int i = 0; i < 2; i ++){
+        digitalWrite(masterPressurePins[i], LOW);
+        digitalWrite(masterVacuumPins[i],   HIGH);
+      }
+    }
+    else if (state == 102) {
+      if (debug) Serial.println("MASTER PRESSURE ON");
+      for (int i = 0; i < 2; i ++){
+        digitalWrite(masterPressurePins[i], HIGH);
+        digitalWrite(masterVacuumPins[i],   LOW);
+      }      
+    }
+    else{
+      if (state == 104) Serial.println("MASTER IDLE");
+      if (state == 103) Serial.println("ERROR:103, IDLING MASTER");
+      for (int i = 0; i < 2; i ++){
+        digitalWrite(masterVacuumPins[i],   LOW);          
+        digitalWrite(masterPressurePins[i], LOW);
+      }   
+    }
   }
   // Valve Control
   else {
@@ -224,8 +217,4 @@ void handleValve(byte channel, byte state) {
       servoOverride[channel] = 0;
     }
   }
-}
-
-float readPress(byte pin){
-  return 0.01653*analogRead(pin)-.85018;
 }
