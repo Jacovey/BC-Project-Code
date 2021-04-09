@@ -9,12 +9,13 @@
  CONTROL MAPPING FOR 4:
  ORDER    : L1 L2 L3 L4  S  A  C  P  B  T   L BL  MA
  Channel  :  1  2  3  4  5  6  7  8  9 11  12 12  13
- Paddress : 22 24 26 28 30 32 34 36 38 40  48 50  45
+ Paddress : 22 24 26 28 30 32 34 36 38 40  48 50  42/43
  Vaddress : 23 25 27 29 31 33 35 37 39 41  51     44
  Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10
 
  NOTES FOR BC4: 
- 3/1/2020: has three "extra" channels for Heels, Top and Lasso, none of which have feedback properly connected. the setup for Lasso is not sequenction, but the other nearby options were having problems
+ 3/1/2020: three "extra" channels for Heels, Top and Lasso, none of which have feedback properly connected. the setup for Lasso is not sequenction, but the other nearby options were having problems
+ 4/8/2020: channel 45 died, also this specific BC uses three valves for the pressure and vacuum bus due to the on-board configuration.
 */
 
 #define numChan 13              // Includes all channels (blower and master are final two channels)
@@ -30,7 +31,7 @@
 static int pSensPins[numValveChan]           = {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10};// Pressure sense pins (A0-A14)
 static unsigned int pValvePins[numValveChan] = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40,  48};// Pressure valve pins (generally even numbered pins from 22 up)
 static unsigned int vValvePins[numValveChan] = {23, 25, 27, 29, 31, 33, 35, 37, 39, 41,  51};//   Vacuum valve pins (generally odd  numbered pins from 23 up)
-static unsigned int masterVPins[4]           = {42, 43, 44, 45};//   Master valve pins (arranged {atmo inlet, atmo outlet})
+static unsigned int masterVPins[4]           = {42, 43, 44};//   Master valve pins (arranged {pbus, atmo outlet, atmo inlet})
 //*************************************************************************************************************************
 
 // Initialize the state arrays
@@ -184,20 +185,20 @@ void loop() {
   }
 
   //Master Pressure Control
+  //   Master valve pins (arranged {pbus-0, atmo outlet-1, atmo inlet-2})
   mastPres = readPress(A14); //get current master pressure
   if  (mastState == 101){
     //Serial.println("MASTER VACUUM ON");
     digitalWrite(masterVPins[0],   LOW);  // close pressure bus
     digitalWrite(masterVPins[1],   HIGH); // open atmo outlet
-    if(ventFlag) digitalWrite(masterVPins[3], LOW); // pull from links if anything is venting
-    else digitalWrite(masterVPins[0], HIGH); // otherwise pull from atmo
+    if(ventFlag) digitalWrite(masterVPins[2], LOW); // pull from links if anything is venting
+    else digitalWrite(masterVPins[2], HIGH); // otherwise pull from atmo
   }
   else if (mastState == 102) {
     //Serial.println("MASTER PRESSURE ON");
     digitalWrite(masterVPins[0], HIGH);  // open pressure bus
-    digitalWrite(masterVPins[2], HIGH);  // open pump inlet
-    if(ventFlag) digitalWrite(masterVPins[3], LOW); // pull from links if anything is venting
-    else digitalWrite(masterVPins[3], HIGH); // otherwise pull from atmo
+    if(ventFlag) digitalWrite(masterVPins[2], LOW); // pull from links if anything is venting
+    else digitalWrite(masterVPins[2], HIGH); // otherwise pull from atmo
     if(mastPres > MAXPRESSURE) digitalWrite(masterVPins[1], HIGH); // open pressure to atmo if its too high
     else digitalWrite(masterVPins[1], LOW); // otherwise keep that closed and build pressure
   }
@@ -207,6 +208,7 @@ void loop() {
     //CLOSE EVERYTHING
     digitalWrite(masterVPins[0],   LOW);
     digitalWrite(masterVPins[1],   LOW);
+    digitalWrite(masterVPins[2],   LOW);
   }
   
   //DISPLAY UPDATER
