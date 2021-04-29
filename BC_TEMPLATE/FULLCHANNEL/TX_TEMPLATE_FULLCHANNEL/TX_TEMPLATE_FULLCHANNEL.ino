@@ -3,32 +3,25 @@
 #include <RH_NRF24.h>
 #include <SPI.h>
 
-// BC5 Transmitter code
+// Transmitter code
 
 /*
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
- CONTROL MAPPING FOR BC5: (Please try and keep this legible, these are temp values)
- ORDER    : L1 L2 L3 L4  S  A  C  P  B R  BL MA
- Channel  :  1  2  3  4  5  6  7  8  9 10 11 12
- PSaddy   : 13 11  8  6  4 15 17 19 21 31 32 44
- VSaddy   : 12 10  9  7  5 14 16 18 20 30 33 43
- POTaddy  : 54 55 56 57 58 59 60 61 62 TBF
- LED      : 48 49 47 46 45 44 43 42 41
-
- NOTES FOR BC5: 
+ CONTROL MAPPING FOR **TEMPLATE**: (This is all of the options, includin joystick control)
+ Channel  :  1  2  3  4  5  6  7  8  9 10 11 12 13 14 JX JY PU MA
+ PSaddy   :  4  6  8 11 13 15 17 19 21 23 24 27 28 30       34 32
+ VSaddy   :  5  7  9 10 12 14 16 18 20 22 25 26 29 31       35 33
+ POTaddy  : 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69
+ LED      : 48 49 47 46 45 44 43 42 41 40 39 38
 */
 
-// Channel informations
-#define numChan      12 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
-#define numValveChan 9 // number of exclusivly valve channels
-
 // Radio Adressing
-#define TX_ADDRESS   9 // make sure it matches the Rx
-#define RX_ADDRESS   10 // make sure it matches the Rx
+#define TX_ADDRESS   /*CHANGE THIS*/ // make sure it matches the Rx
+#define RX_ADDRESS   /*CHANGE THIS*/ // make sure it matches the Rx
 
 // Radio Software Setup
-#define CHANNEL      100 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+#define CHANNEL      /*CHANGE THIS*/ //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
                                                        // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
@@ -46,30 +39,26 @@ RHReliableDatagram radioManager(driver, TX_ADDRESS);
 
 //Initialize the input buffer and output data
 uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
-uint8_t data[numChan];
-
-//Init Debug
-bool debug = true;
+uint8_t data[18];
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numValveChan] =   { 54, 55, 56, 57, 58, 59, 60, 61, 62}; // generally 54 and up
-const uint8_t vSwitchPins[ numChan] =   { 12, 10,  9,  7,  5, 14, 16, 18, 20, 30, 35, 33}; // who tf knows, use the config script
-const uint8_t pSwitchPins[ numChan] =   { 13, 11,  8,  6,  4, 15, 17, 19, 21, 31, 34, 32}; // who tf knows, use the config script
-
-const uint8_t LEDpins[numValveChan] =   { 48, 49, 47, 46, 45, 44, 43, 42, 41}; // generally 48 and down to around 33
+const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69};
+const uint8_t vSwitchPins[ numChan] =   { 5,  7,  9, 10, 12, 14, 16, 18, 20, 22, 25, 26, 29, 31, 35, 33};
+const uint8_t pSwitchPins[ numChan] =   { 4,  6,  8, 11, 13, 15, 17, 19, 21, 23, 24, 27, 28, 30, 34, 32};
+const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38};
 // *******************************************************************************************************************
 
-//Initialize the readings
-uint16_t potReadings[numValveChan];
-bool pSwitchReadings[numChan];
-bool vSwitchReadings[numChan];
+//Initialize the readings for the numbered channels
+uint16_t potReadings[14];
+bool pSwitchReadings[14];
+bool vSwitchReadings[14];
 
 //Initialize the blinker bool
 bool blinker;
 
 void setup() {
   //LED pin blinking sequence
-  for (int i = 0; i < numValveChan; i++) {
+  for (int i = 0; i < 12; i++) {
     // Init the pin
     pinMode (LEDpins[i],      OUTPUT);
 
@@ -82,7 +71,7 @@ void setup() {
   }
 
   // Init the switch pins
-  for (int i = 0; i < numChan; i++) {
+  for (int i = 0; i < 16; i++) {
     pinMode (pSwitchPins[i],  INPUT_PULLUP);
     pinMode (vSwitchPins[i],  INPUT_PULLUP);
   }
@@ -104,7 +93,7 @@ void setup() {
     driver.setRF(DATARATE, TX_POWER);
   }
   // communicate its ready and then chill for a bit
-  Serial.println("BCcontrollerTX_3 Ready.");
+  Serial.println("BCcontrollerTX Ready.");
   Serial.println();
   delay(500);
 }
@@ -112,33 +101,31 @@ void setup() {
 void loop() {
   static unsigned long last_display_time = 0; // for timekeeping
     
-  // READING CONTROLS
-  // Note: the last two channels are blower and master pressure, but they are handled by the reciever
-  for (int i = 0; i < numChan; i++) {
-    if (i < numChan-3) { // Valves and proportional Utility channels only
-      // Read pots
-      potReadings[i] = 100 - analogRead(potPINS[i]) * (100.0 / 1023.0); // interprets pot signal from 0 to 100
+  // READING NUMBERED CHANNEL CONTROLS
+  for (int i = 0; i < 14; i++) {
+    // Read pots
+    potReadings[i] = 100 - analogRead(potPINS[i]) * (100.0 / 1023.0); // interprets pot signal from 0 to 100
 
-      // Read switches
-      pSwitchReadings[i] = !digitalRead(pSwitchPins[i]);
-      vSwitchReadings[i] = !digitalRead(vSwitchPins[i]);
+    // Read switches
+    pSwitchReadings[i] = !digitalRead(pSwitchPins[i]);
+    vSwitchReadings[i] = !digitalRead(vSwitchPins[i]);
 
-      // Interpret control to yield data entry
-      // check for manual control
-      if (pSwitchReadings[i] == 1 || vSwitchReadings[i] == 1) { // only overwrite the pots if switches are active or if its under the deadband
-        data[i] = 100 + pSwitchReadings[i] + 2 * vSwitchReadings[i]; // means 104 is idle, 101 is vacuum, 102 is pressure, 103 is error
-      }
-      // otherwise if the pot is outside of the deadband, use that signal
-      else if (potReadings[i] > POT_DEADBAND) data[i] = potReadings[i];
-      // otherwise if in the deadband, idle
-      else data[i] = 104;
+    // Interpret control to yield data entry
+    // check for manual control
+    else if (pSwitchReadings[i] == 1 || vSwitchReadings[i] == 1) { // only overwrite the pots if switches are active or if its under the deadband
+      data[i] = 100 + pSwitchReadings[i] + 2 * vSwitchReadings[i]; // means 104 is idle, 101 is vacuum, 102 is pressure, 103 is error
     }
-    else { //Blower and P/V Master
-      pSwitchReadings[i] = !digitalRead(pSwitchPins[i]);
-      vSwitchReadings[i] = !digitalRead(vSwitchPins[i]);
-      data[i] = 100 + pSwitchReadings[i] + 2 * vSwitchReadings[i]; // same encoding as above
-    }
+    // otherwise if the pot is outside of the deadband, use that signal
+    else if (potReadings[i] > POT_DEADBAND) data[i] = potReadings[i];
+    // otherwise if in the deadband, idle
+    else data[i] = 104;
   }
+
+  //Read special channels
+  data[14]=100 - analogRead(potPINS[14]) * (100.0 / 1023.0); //joystick X
+  data[15]=100 - analogRead(potPINS[15]) * (100.0 / 1023.0); //joystick Y
+  data[16]=100 + pSwitchReadings[i] + 2 * vSwitchReadings[i]; // pump switch, same encoding as above
+  data[17]=100 + pSwitchReadings[i] + 2 * vSwitchReadings[i]; // master switch, same encoding as above
 
   //UPDATE DISPLAY
   if ((millis() - last_display_time) > 100) { // update every tenth of second
@@ -190,7 +177,7 @@ void LEDdisplay() {
     else if (state==1) {pinMode(LEDpins[i], OUTPUT); digitalWrite(LEDpins[i],  LOW);} //1 is Solid Green
     else if (state==2) {pinMode(LEDpins[i],  INPUT);                                } //2 is Off 
     else{// Blinking lights
-      if (state==3){
+      if (state=3){
         if (blinker) { pinMode(LEDpins[i], OUTPUT); digitalWrite(LEDpins[i], HIGH);} // 3 is blink red
         else         { pinMode(LEDpins[i],  INPUT);                                }
       }

@@ -22,10 +22,12 @@
 #define numValveChan 11         // # of links
 #define blowerRelay 50          // pin for blower relay
 #define PRESSURE_TOLERANCE .1   // helps slow relay bouncing (generally .1-.5 psi)
-#define MAXLINKPRESSURE 5      // max pressure in each link (generally 5)
+#define MAXLINKPRESSURE 8      // max pressure in each link (generally 5)
 #define MAXPRESSURE 14.5          // max pressure of the pump (generally 14.5-15)
 
-#define debug true                // boolean to report useful serial debug messages
+#define pressureBusSensePin A14  // pin for the master pressure sensor
+
+#define debug false                // boolean to report useful serial debug messages
                                         
 //******************************************************CONFIGURATION******************************************************
 static int pSensPins[numValveChan]           = {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10};// Pressure sense pins (A0-A14)
@@ -37,8 +39,8 @@ static unsigned int masterVPins[4]           = {42, 43, 44};//   Master valve pi
 // Initialize the state arrays
 float currentPressures[  numValveChan]; // stores the current pressure of each link
 float targetPressures[   numValveChan]; // stores the assigned target pressure of each link for proportional control
-bool  servoOverride[     numValveChan]; // indicates whether proportional control or manual control should be used for each link
 float pressureErrors[    numValveChan]; // stores the pressure errors for each link for proportional control
+bool  pbuffbool[         numValveChan]; // stores the pressure buffer bools
 
 // Initialize communication arrays
 uint8_t data[numChan];         // stores most recent data received from the transmitter
@@ -48,32 +50,40 @@ uint8_t LEDdata[numValveChan]; // stores what state the LEDs on the controller s
 int   mastState = 0; // State of the master pressure
 float  mastPres = 0; // Master pressure
 
+//Init the runtime variables (cuts down on new variable allocation)
+bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
+bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
+bool propFlag = false; // keep track of whether any proportional controled link needs air
+int state = 103; //scanner variable that is used a lot during runtime
+
 void setup() {
   //Start Serial
-  Serial.begin(9600);
+  Serial.begin(9600);  
 
-  //Initiliaze output pins
-  for (int i = 0; i < numValveChan; i++) {
-    //Initialize each valve pin at low
-    pinMode(pValvePins[i], OUTPUT);
-    pinMode(vValvePins[i], OUTPUT);
-    digitalWrite(vValvePins[i], LOW);
-    digitalWrite(pValvePins[i], LOW);
-
+  //Initiliaze
+  for (int i = 0; i < numChan; i++) {
     //Initialize the atmo valves at low
     if(i<2){
       pinMode(masterVPins[i], OUTPUT);
       digitalWrite(masterVPins[i], LOW);
     }
+    if (i<numValveChan){
+     //Initialize each valve pin at low
+      pinMode(pValvePins[i], OUTPUT);
+      pinMode(vValvePins[i], OUTPUT);
+      digitalWrite(vValvePins[i], LOW);
+      digitalWrite(pValvePins[i], LOW);
+    }
+    data[i]=104; // init the array so that it doesnt vent everything at startup
   }
-  pinMode(A14, INPUT);
+  pinMode(pressureBusSensePin, INPUT); // init the master pressure sensor
 
   // Listen to wire 1 for Serial communications
   Wire.begin(1); // init the I2C connection on bus 1
   Wire.onReceive(handleRXCommand); // declares the function to be called when an I2C message is received
 
   // Init Message
-  Serial.println("Border Crosser 5 Ready.");
+  Serial.println("Border Crosser Ready.");
   Serial.println();
 }
 
@@ -85,7 +95,7 @@ void handleRXCommand(int howmany) {
       int state = Wire.read(); // read each command from the I2C message
       data[i] = state; // store each command in data
 
-      // ---------VALVE HANDLING---------
+      // ---------SPECIAL HANDLING---------
       // KEY: 101 is "on"/"pressurize", 102 is "off"/"depressurize", 103 is a switch error, 104 is "idle"
       //      any other value is read as a value from 0-100 inclusive (for analog systems)
       
@@ -98,29 +108,6 @@ void handleRXCommand(int howmany) {
       else if (i == numChan-1){// Master is always last channel
         mastState = state;
       }
-      // Valve Control
-      else {
-        if (state == 102) { // MANUAL PRESSURIZE
-          digitalWrite(pValvePins[i], HIGH);
-          digitalWrite(vValvePins[i], LOW);
-          servoOverride[i] = 1; // indicate valve is under manual control
-        }
-        else if (state == 101) { // MANUAL VENT
-          digitalWrite(pValvePins[i], LOW);
-          digitalWrite(vValvePins[i], HIGH);
-          servoOverride[i] = 1; // indicate valve is under manual control
-        }
-        else if (state == 103 || state == 104) { // MANUAL IDLE (or switch error)
-          if (state == 103){ Serial.print("ERROR:103, IDLING CH"); Serial.print(i); Serial.println();}
-          digitalWrite(pValvePins[i], LOW);
-          digitalWrite(vValvePins[i], LOW);
-          servoOverride[i] = 1; // indicate valve is under manual control
-        }
-        else{
-          targetPressures[i] = (state/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
-          servoOverride[i] = 0; // indicate valve is under proportional control
-        }
-      }
     }
     else if (i>=numChan) Serial.println("ERR: too many messages received");
   }
@@ -129,59 +116,99 @@ void handleRXCommand(int howmany) {
 void loop() {
   static unsigned long last_display_time = 0; // to keep track of time since last display update
 
-  //Valve and LED handling
-  bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
-  bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
+  // Global States resetting
+  ventFlag = false;
+  pressFlag = false;
+  propFlag = false;
+
+  // Pressure Readings
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
-    //Handling Proportional Drive
-    if (servoOverride[i] == 0) {  // if it's NOT in manual direct drive mode
-      //Pressure Sensor reading
-      currentPressures[i] = readPress(pSensPins[i]);
-      
-      //Get the errors
-      pressureErrors[i] = (targetPressures[i]) - (currentPressures[i]);
-      if (abs(pressureErrors[i]) < PRESSURE_TOLERANCE) { // IDLE (if the pressure error is small)
-        // stop flow in and out of link
-        digitalWrite(pValvePins[i], LOW);
-        digitalWrite(vValvePins[i], LOW);
-        // if the pressure is within tolerance, make the LED green
-        LEDdata[i] = 1; // LED is green when at target in proportional control schema
-      }
-      else if (pressureErrors[i] > 0 && mastPres>currentPressures[i]) { // PRESSURIZE (if the master pressure is higher than the link pressure)
-        // stop flow out, start flow in
+    if (data[i]<=100){ // checks if this link is under proportional control (all manual control signals are > 100)
+      targetPressures[i] = (data[i]/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
+      currentPressures[i] = readPress(pSensPins[i]); //Pressure Sensor reading
+      pressureErrors[i] = (targetPressures[i]) - (currentPressures[i]); // get the errors
+      if(pressureErrors[i] > PRESSURE_TOLERANCE || pbuffbool[i]) propFlag = true; // note if prop links need pressure
+    }
+  }
+  
+  // Valve Handling
+  for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
+    state = data[i];
+
+    //Handling Manual Drive
+    if (state == 102) { // MANUAL PRESSURIZE
+      if (!propFlag){// only pressurize if the prop links dont need it
         digitalWrite(pValvePins[i], HIGH);
         digitalWrite(vValvePins[i], LOW);
-        // if the pressure is outside of tolerance, make the LED red
-        LEDdata[i] = 0; // LED is red when not at target in proportional control schema
-        pressFlag = true;
       }
-      else if (pressureErrors[i] < 0) { // VENT
-        // stop flow in, start flow out
+      else {// otherwise idle
         digitalWrite(pValvePins[i], LOW);
-        digitalWrite(vValvePins[i], HIGH);
-        // if the pressure is outside of tolerance, make the LED red
-        LEDdata[i] = 0; // LED is red when not at target in proportional control schema
-        //ventFlag = true; TEMP FOR INCOMPLETE VAC BUS
+        digitalWrite(vValvePins[i], LOW);
       }
-    } 
-    // Updating the LED states for manual drive (updating the actual valves is done on-receive)
-    else{
-      //get commanded state
-      int state = data[i];
-      // Update LED's based on condition
-      // if manual idle, turn off light
-      if (state == 104) LEDdata[i]=2; 
-      // if the link is in manual pressurize, make the LED red until you get to max pressure, then blink green
-      else if (state == 102 && currentPressures[i]<MAXLINKPRESSURE){ LEDdata[i]=0; pressFlag = true;}
-      else if (state == 102){                                        LEDdata[i]=4; pressFlag = true;}
-      // if the link is in manual vent, blink red
-      else if (state == 101){                                        LEDdata[i]=3;}//  ventFlag = true;} TEMP FOR INCOMPLETE VAC BUS
+      if (currentPressures[i]<MAXLINKPRESSURE){ LEDdata[i]=0; pressFlag = true;}// if below max, solid red
+      else                                    { LEDdata[i]=3; pressFlag = true;}// if passed max pressure, blink red as a warning
     }
+    else if (state == 101) { // MANUAL VENT
+      digitalWrite(pValvePins[i], LOW);
+      digitalWrite(vValvePins[i], HIGH);
+      LEDdata[i]=4;// manual vent should be blinking green
+    }
+    else if (state == 103) { // SWITCH ERROR
+      Serial.print("ERROR:103, IDLING CH"); Serial.print(i); Serial.println();
+      digitalWrite(pValvePins[i], LOW);
+      digitalWrite(vValvePins[i], LOW);
+      LEDdata[i]=2; // if manual idle, turn off light
+    }
+    else if ( state == 104 ){ // MANUAL IDLE
+      digitalWrite(pValvePins[i], LOW);
+      digitalWrite(vValvePins[i], LOW);
+      LEDdata[i]=2; // if manual idle, turn off light
+    }
+    // Handling Proportional Drive
+    else if (pressureErrors[i] > 0 || pbuffbool[i]) { // PRESSURIZE up to the desired pressure
+      if (mastPres>currentPressures[i]){// only actually pressurize if the master pressure would be able to help
+        if(pressureErrors[i] < 0 ){// idle if passed the desired pressure
+          pbuffbool[i]=false;// stop pressurizing past desired pressure!
+          digitalWrite(pValvePins[i], LOW);
+          digitalWrite(vValvePins[i], LOW);
+          LEDdata[i] = 1;
+        }
+        else if (pbuffbool[i] || pressureErrors[i] > PRESSURE_TOLERANCE){// activate pressure if out of tolerance
+          digitalWrite(pValvePins[i], HIGH);
+          digitalWrite(vValvePins[i], LOW);
+          pressFlag = true;
+          if (pressureErrors[i] > PRESSURE_TOLERANCE){
+            pbuffbool[i]=true; // start pressurizing to the desired pressure!
+          }
+          // if the pressure is outside of tolerance, make the LED red
+          LEDdata[i] = 0;
+        }
+      }
+      else{ // if master cant help, idle
+        digitalWrite(pValvePins[i], LOW);
+        digitalWrite(vValvePins[i], LOW);
+      }
+    }
+    else if (pressureErrors[i] < PRESSURE_TOLERANCE*-1) { // VENT
+      // stop flow in, start flow out
+      digitalWrite(pValvePins[i], LOW);
+      digitalWrite(vValvePins[i], HIGH);
+      // if the pressure is outside of tolerance, make the LED red
+      LEDdata[i] = 0; // LED is red when not at target in proportional control schema
+      pbuffbool[i]=false;
+    }
+    else { // IDLE
+      // stop flow in and out of link
+      digitalWrite(pValvePins[i], LOW);
+      digitalWrite(vValvePins[i], LOW);
+      // if the pressure is within tolerance, make the LED green
+      LEDdata[i] = 1; // LED is green when at target in proportional control schema
+    }
+  }
 
-    //TEMPORARY CODE FOR INCOMPLETE VACCUUM BUS IMPLEMENTATION: VACUUM BUS IS ONLY ON SPIRAL, ARCH, BANANA, CONE
-    if (data[4]==101 || data[5]==101 || data[6]==101 || data[7]==101){
-      ventFlag=true;
-    }
+  //TEMPORARY CODE FOR INCOMPLETE VACCUUM BUS IMPLEMENTATION: VACUUM BUS IS ONLY ON SPIRAL, ARCH, BANANA, CONE
+  if (data[4]==101 || data[5]==101 || data[6]==101 || data[7]==101){
+    ventFlag=true;
   }
 
   //Master Pressure Control
@@ -218,7 +245,7 @@ void loop() {
     Wire.beginTransmission(2);
     Wire.write(LEDdata, sizeof(LEDdata));
     Wire.endTransmission();
-    DEBUGLOG();
+    if (debug) DEBUGLOG();
   }
 }
 
@@ -233,7 +260,7 @@ void DEBUGLOG(){
     if(i<numValveChan){
       if      (data[i]==102 )                                                        Serial.print(" M+ "); // manual pressure
       else if (data[i]==101)                                                         Serial.print(" M- "); // manual vent
-      else if (abs(pressureErrors[i]) > PRESSURE_TOLERANCE){ // proportional pressure
+      else if (abs(pressureErrors[i]) > 0){ // proportional pressure
         float pres = pressureErrors[i];
         if (pres<0) Serial.print(pres,1);
         else Serial.print(pres,2);
@@ -265,7 +292,7 @@ void DEBUGLOG(){
     float pres = readPress(pSensPins[i]);
     pres = round(pres * 10);
     pres = pres/10;
-    if (pres > 0)Serial.print(pres); // read pressure
+    if (pres > 0)Serial.print(pres,2); // read pressure
     else Serial.print("0.00");
     Serial.print("|");
   }

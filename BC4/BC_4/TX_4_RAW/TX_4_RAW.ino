@@ -3,32 +3,29 @@
 #include <RH_NRF24.h>
 #include <SPI.h>
 
-// BC5 Transmitter code
+// BC4 Transmitter code
 
 /*
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
- CONTROL MAPPING FOR BC5: (Please try and keep this legible, these are temp values)
- ORDER    : L1 L2 L3 L4  S  A  C  P  B R  BL MA
- Channel  :  1  2  3  4  5  6  7  8  9 10 11 12
- PSaddy   : 13 11  8  6  4 15 17 19 21 31 32 44
- VSaddy   : 12 10  9  7  5 14 16 18 20 30 33 43
- POTaddy  : 54 55 56 57 58 59 60 61 62 TBF
- LED      : 48 49 47 46 45 44 43 42 41
+ CONTROL MAPPING FOR BC4: (Please try and keep this legible, these are temp values)
+ ORDER    : L1 L2 L3 L4  S  A  C  P  B  T  L BL MA
+ Channel  :  1  2  3  4  5  6  7  8  9 11 12 12 13
+ PSaddy   : 13 11  8  6  4 15 17 21 23 24 27 34 32
+ VSaddy   : 12 10  9  7  5 14 16 20 22 25 26 35 33
+ POTaddy  : 54 55 56 57 58 59 60 62 63 64 65
+ LED      : 48 49 47 46 45 44 43 41 40 39 38
 
- NOTES FOR BC5: 
+ NOTES FOR BC4: 
+ 3/1/2020: has three "extra" channels for Heels, Top and Lasso, none of which have feedback properly connected.
 */
 
 // Channel informations
-#define numChan      12 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
-#define numValveChan 9 // number of exclusivly valve channels
-
-// Radio Adressing
-#define TX_ADDRESS   9 // make sure it matches the Rx
-#define RX_ADDRESS   10 // make sure it matches the Rx
+#define numChan      13 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
+#define numValveChan 11 // number of exclusivly valve channels
 
 // Radio Software Setup
-#define CHANNEL      100 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+#define CHANNEL      85 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
                                                        // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
@@ -42,21 +39,20 @@
 
 //Radio driver and manager setup
 RH_NRF24 driver(NRF24_EN, NRF24_CS);
-RHReliableDatagram radioManager(driver, TX_ADDRESS);
 
 //Initialize the input buffer and output data
 uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t data[numChan];
 
 //Init Debug
-bool debug = true;
+bool debug = false;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numValveChan] =   { 54, 55, 56, 57, 58, 59, 60, 61, 62}; // generally 54 and up
-const uint8_t vSwitchPins[ numChan] =   { 12, 10,  9,  7,  5, 14, 16, 18, 20, 30, 35, 33}; // who tf knows, use the config script
-const uint8_t pSwitchPins[ numChan] =   { 13, 11,  8,  6,  4, 15, 17, 19, 21, 31, 34, 32}; // who tf knows, use the config script
+const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 62, 63, 64, 65}; // generally 54 and up
+const uint8_t vSwitchPins[ numChan] =   {12, 10,  9,  7,  5, 14, 16, 20, 22, 25, 26, 35, 33}; // who tf knows, use the config script
+const uint8_t pSwitchPins[ numChan] =   {13, 11,  8,  6,  4, 15, 17, 21, 23, 24, 27, 34, 32}; // who tf knows, use the config script
 
-const uint8_t LEDpins[numValveChan] =   { 48, 49, 47, 46, 45, 44, 43, 42, 41}; // generally 48 and down to around 33
+const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 41, 40, 39, 38}; // generally 48 and down to around 33
 // *******************************************************************************************************************
 
 //Initialize the readings
@@ -91,20 +87,18 @@ void setup() {
   Serial.begin(9600);
 
   // See if radio init correctly
-  if (!radioManager.init()) {
+  if (!driver.init()) {
     Serial.println("TX init failed");
     while(1);
   }
   else {
     Serial.println("TX radio initialized");
-    Serial.print("Transmitting from address: "); Serial.println(TX_ADDRESS);
-    Serial.print("to RX_ADDRESS: "); Serial.println(RX_ADDRESS);  Serial.println();
     Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
     driver.setChannel(CHANNEL);
     driver.setRF(DATARATE, TX_POWER);
   }
   // communicate its ready and then chill for a bit
-  Serial.println("BCcontrollerTX_3 Ready.");
+  Serial.println("BCcontrollerTX_4 Ready.");
   Serial.println();
   delay(500);
 }
@@ -115,7 +109,7 @@ void loop() {
   // READING CONTROLS
   // Note: the last two channels are blower and master pressure, but they are handled by the reciever
   for (int i = 0; i < numChan; i++) {
-    if (i < numChan-3) { // Valves and proportional Utility channels only
+    if (i < numChan-2) { // Valves and Utility channels only
       // Read pots
       potReadings[i] = 100 - analogRead(potPINS[i]) * (100.0 / 1023.0); // interprets pot signal from 0 to 100
 
@@ -149,35 +143,34 @@ void loop() {
 
   // transmit and receive radio data and display data
   //Send data to RX
-  if (radioManager.sendtoWait(data, sizeof(data), RX_ADDRESS)) {
+  driver.send(data, sizeof(data));
+  driver.waitPacketSent();
+  if (driver.waitAvailableTimeout(100)) {
+    
     //initialize some variables to point to
     uint8_t len = sizeof(buf);
-    uint8_t from;
-    
-    // Now attempt to pickup a reply from the receiver
-    if (radioManager.recvfromAckTimeout(buf, &len, 250, &from)) {
-      //if received and debug is on, print out the LED command
-      if (debug){
-        for (int i = 0; i < numValveChan; i++) {
-          Serial.print(buf[i]);
-          Serial.print(" ");
-        }
-        Serial.println();
-      }
-    }
-    else{Serial.println("FAILED RESPONSE");}
 
-    // if debug is on, print out what the TX just tried to send
+    // Now attempt to pickup a reply from the receiver
+    driver.recv(buf, &len);
+    //if received and debug is on, print out the LED command
     if (debug){
-      Serial.print("TX_"); Serial.print(TX_ADDRESS);
-      Serial.print(" sent      ");
-      for (int i = 0; i < sizeof(data); i++) {
-        Serial.print(data[i]);
+      for (int i = 0; i < numValveChan; i++) {
+        Serial.print(buf[i]);
         Serial.print(" ");
       }
-      Serial.print(" to RX_"); Serial.println(RX_ADDRESS);
       Serial.println();
     }
+  }
+  //else{Serial.println("FAILED RESPONSE");}
+
+  // if debug is on, print out what the TX just tried to send
+  if (debug){
+    Serial.print(" sent      ");
+    for (int i = 0; i < sizeof(data); i++) {
+      Serial.print(data[i]);
+      Serial.print(" ");
+    }
+    Serial.println();
   }
 }
 

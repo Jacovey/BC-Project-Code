@@ -21,8 +21,8 @@
 */
 
 // Channel informations
-#define numChan      12 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
-#define numValveChan 10 // number of exclusivly valve channels
+#define numChan      13 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
+#define numValveChan 11 // number of exclusivly valve channels
 
 // Radio Adressing
 #define TX_ADDRESS   5 // make sure it matches the Rx
@@ -53,10 +53,10 @@ uint8_t data[numChan];
 bool debug = true;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 61, 62, 63}; // generally 54 and up
-const uint8_t vSwitchPins[ numChan] =   {12, 10,  9,  7,  5, 14, 16, 18, 20, 22, 35, 33}; // who tf knows, use the config script
-const uint8_t pSwitchPins[ numChan] =   {13, 11,  8,  6,  4, 15, 17, 19, 21, 23, 34, 32}; // who tf knows, use the config script
-const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 42, 41, 40}; // generally 48 and down to around 33
+const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64}; // generally 54 and up
+const uint8_t vSwitchPins[ numChan] =   {12, 10,  9,  7,  5, 14, 16, 18, 20, 22, 25, 35, 33}; // who tf knows, use the config script
+const uint8_t pSwitchPins[ numChan] =   {13, 11,  8,  6,  4, 15, 17, 19, 21, 23, 24, 34, 32}; // who tf knows, use the config script
+const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 42, 41, 40, 39}; // generally 48 and down to around 33
 // *******************************************************************************************************************
 
 //Initialize the readings
@@ -190,7 +190,7 @@ void LEDdisplay() {
     else if (state==1) {pinMode(LEDpins[i], OUTPUT); digitalWrite(LEDpins[i],  LOW);} //1 is Solid Green
     else if (state==2) {pinMode(LEDpins[i],  INPUT);                                } //2 is Off 
     else{// Blinking lights
-      if (state=3){
+      if (state==3){
         if (blinker) { pinMode(LEDpins[i], OUTPUT); digitalWrite(LEDpins[i], HIGH);} // 3 is blink red
         else         { pinMode(LEDpins[i],  INPUT);                                }
       }

@@ -24,7 +24,7 @@
 #define LED_RED_2     9
 
 // Initiliaze radio driver and manager
-RH_NRF24 driver(2);
+RH_NRF24 driver(2); // neccesary for the interface board
 RHReliableDatagram radioManager(driver, RX_ADDRESS);
 
 // Declare the input data buffer and the output LEDdata buffer

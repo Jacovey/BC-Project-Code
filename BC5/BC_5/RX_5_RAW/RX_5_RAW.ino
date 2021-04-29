@@ -1,18 +1,13 @@
-// BC3 Receiver Code
+// BC5 Receiver Code
 
 #include <RadioHead.h> 
 #include <Wire.h>
-#include <RHReliableDatagram.h>
 #include <RH_NRF24.h>
 #include <SPI.h>
 
-// Radio Adressing
-#define TX_ADDRESS 5 // make sure it matches the Tx
-#define RX_ADDRESS 6 // make sure it matches the Tx
-
 // Radio Software Setup
-#define CHANNEL      70 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
-                                          // otherwise they can interfere with eachother
+#define CHANNEL      100 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+                                                       // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
 
@@ -24,17 +19,18 @@
 #define LED_RED_2     9
 
 // Initiliaze radio driver and manager
-RH_NRF24 driver(2); // neccesary for the interface board
-RHReliableDatagram radioManager(driver, RX_ADDRESS);
+RH_NRF24 driver(2);
 
 // Declare the input data buffer and the output LEDdata buffer
 uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t LEDdata[RH_NRF24_MAX_MESSAGE_LEN];
 
+bool debug = true;
+
 void setup() {
   //Serial startup
   Serial.begin(9600);
-  
+
   //LED pin init
   pinMode(LED_GREEN_1, OUTPUT);
   pinMode(LED_GREEN_2, OUTPUT);
@@ -43,18 +39,16 @@ void setup() {
   
   //Setup serial communication with the pneuma mega
   Wire.begin(2); // join i2c bus (address optional for master)
-  Wire.onReceive(LEDread); // setup receive function
+  Wire.onReceive(LEDDataRead); // setup receive function
 
   //Check if radio failed to initialize
-  if (!radioManager.init()) {
+  if (!driver.init()) {
     Serial.println("RX radio initialization failed");
     digitalWrite(LED_RED_2, HIGH); // red failed init
   }
   //Communicate radio readiness
   else {
     Serial.println("RX radio initialized");
-    Serial.print("Receiving transmissions at RX_ADDRESS: "); Serial.println(RX_ADDRESS);
-    Serial.print("From TX_ADDRESS: "); Serial.println(TX_ADDRESS); Serial.println();
     Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
     
     //Set the config of the radio driver and manager
@@ -68,36 +62,33 @@ void setup() {
 }
 
 void loop(){
-  //check if packet is available
-  if (radioManager.available()){
+  //Wait for incoming packet
+  if (driver.waitAvailableTimeout(1000)){
+    //init the storage
     uint8_t len = sizeof(buf);
-    uint8_t from;
+
+    // get the packet
+    driver.recv (buf, &len);
+    //awknoledge the receipt
+    blinker(LED_GREEN_1);
     
-    // get that packet, store in buf
-    if (radioManager.recvfromAck(buf, &len, &from)){
-      //Attempt to respond with current LED data
-      if (!radioManager.sendtoWait(LEDdata, sizeof(LEDdata), TX_ADDRESS)) {
-         Serial.println("Failed Response");
-         blinker(LED_RED_1); // Signal failed response
-      }
-      //print out the received info in buffer
-      for (int i=0; i<len;i++){
-        Serial.print(buf[i]); Serial.print(" ");
-      }
-      Serial.println();
+    // pass on buf to the pneuma mega
+    Wire.beginTransmission(1);
+    Wire.write(buf, len);
+    Wire.endTransmission();
 
-      //pass on buf to the pneuma mega
-      Wire.beginTransmission(1);
-      Wire.write(buf, len);
-      Wire.endTransmission();
-
-      //Awknowledge the received signal
-      blinker(LED_GREEN_1);
+    // send LED data back
+    driver.send(LEDdata, sizeof(LEDdata));
+    driver.waitPacketSent(); // wait till its done sending
+    //print out the received info in buffer
+    for (int i=0; i<len;i++){ // print out received data
+      Serial.print(buf[i]); Serial.print(" ");
     }
+    Serial.println();
   }
 }
 
-void LEDread(int howmany){  // CALLED WHEN I2C MESSAGE ARRIVES from BC
+void LEDDataRead(int howmany){  // CALLED WHEN I2C MESSAGE ARRIVES from BC
   for (int i = 0; i < howmany; i++) { // Reads wire into LEDdata piecemeal
     LEDdata[i] = Wire.read();
   }
