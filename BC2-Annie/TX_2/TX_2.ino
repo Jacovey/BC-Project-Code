@@ -3,29 +3,30 @@
 #include <RH_NRF24.h>
 #include <SPI.h>
 
-// **TEMPLATE** Transmitter code
+// BC2-Annie Transmitter code
 
 /*
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
- CONTROL MAPPING FOR **TEMPLATE**: (This is all of the options, includin joystick control)
- Channel  :  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18
- Order    :                                           JX JY PU MA
- PSaddy   :  4  6  8 11 13 15 17 19 21 23 24 27 28 30       34 32
- VSaddy   :  5  7  9 10 12 14 16 18 20 22 25 26 29 31       35 33
- POTaddy  : 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69
- LED      : 48 49 47 46 45 44 43 42 41 40 39 38
+ CONTROL MAPPING FOR BC2-Annie: (This is all of the options, includin joystick control)
+ Channel  :  1  2  3  4  5  6  7  8  9  10  11  12  13  14 15 16
+ Order    : L1 L2 L3 L4 L5 L6 L7 L8 L9 L10 L11 L12 L13 L14 PU WI
+ PSaddy   : 13 11  8  6  4 15 17 19 21  23  24  27  28  30 34 32
+ VSaddy   : 12 10  9  7  5 14 16 18 20  22  25  26  29  31 35 33
+ POTaddy  : 54 55 56 57 58 59 60 61 62  63  64  65  66  67
+ LED      : 48 49 47 46 45 44 43 42 41  40  39  38  37  36
 
- NOTES FOR **TEMPLATE**: 
- MM/DD/YYYY: NOTE SOMETHING
+ NOTES FOR BC2-Annie: 
+ 05/05/2021: Initial setup; Channels 2p,2v,12p,12v are dead. No pressure master/vacuum because its always pressure. Winch instead of master
+ 
 */
 
 // Channel informations
-#define numChan      /*CHANGE THIS*/ // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
-#define numValveChan /*CHANGE THIS*/ // number of exclusivly valve channels
+#define numChan      16 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
+#define numValveChan 14 // number of exclusivly valve channels
 
 // Radio Software Setup
-#define CHANNEL      /*CHANGE THIS*/ //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+#define CHANNEL      50 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
                                                        // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
@@ -45,13 +46,13 @@ uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t data[numChan];
 
 //Init Debug
-bool debug = true;
+bool debug = false;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69};
-const uint8_t vSwitchPins[ numChan] =   { 5,  7,  9, 10, 12, 14, 16, 18, 20, 22, 25, 26, 29, 31, 35, 33};
-const uint8_t pSwitchPins[ numChan] =   { 4,  6,  8, 11, 13, 15, 17, 19, 21, 23, 24, 27, 28, 30, 34, 32};
-const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38};
+const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67};
+const uint8_t vSwitchPins[ numChan] =   {12, 10,  9,  7,  5, 14, 16, 18, 20, 22, 25, 26, 29, 31, 35, 33};
+const uint8_t pSwitchPins[ numChan] =   {13, 11,  8,  6,  4, 15, 17, 19, 21, 23, 24, 27, 28, 30, 34, 32};
+const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36};
 // *******************************************************************************************************************
 
 //Initialize the readings
@@ -117,9 +118,10 @@ void loop() {
       vSwitchReadings[i] = !digitalRead(vSwitchPins[i]);
 
       // Interpret control to yield data entry
-      // check for manual control
-      if (pSwitchReadings[i] == 1 || vSwitchReadings[i] == 1) { // only overwrite the pots if switches are active or if its under the deadband
+      // check for manual control                    
+      if (pSwitchReadings[i] == 1 || vSwitchReadings[i] == 1 || i==7) { // only overwrite the pots if switches are active or if its under the deadband
         data[i] = 100 + pSwitchReadings[i] + 2 * vSwitchReadings[i]; // means 104 is idle, 101 is vacuum, 102 is pressure, 103 is error
+        if (data[i] == 100 && i==7) data[i]=104;// POT 8 IS DEAD
       }
       // otherwise if the pot is outside of the deadband, use that signal
       else if (potReadings[i] > POT_DEADBAND) data[i] = potReadings[i];

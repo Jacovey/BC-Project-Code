@@ -1,4 +1,4 @@
-// **TEMPLATE** Receiver Code
+// BC2-Annie Receiver Code
 
 #include <RadioHead.h> 
 #include <Wire.h>
@@ -7,7 +7,7 @@
 #include <SPI.h>
 
 // Radio Software Setup
-#define CHANNEL      /*CHANGE THIS*/ //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+#define CHANNEL      50 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
                                                        // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
@@ -30,7 +30,7 @@ uint8_t LEDdata[RH_NRF24_MAX_MESSAGE_LEN];
 bool blinkBool = false;
 
 //Debug bool
-bool debug = true;
+bool debug = false;
 
 void setup() {
   //Serial startup
@@ -41,6 +41,7 @@ void setup() {
   pinMode(LED_GREEN_2, OUTPUT);
   pinMode(LED_RED_1, OUTPUT);
   pinMode(LED_RED_2, OUTPUT);
+  
   
   //Setup serial communication with the pneuma mega
   Wire.begin(2); // join i2c bus (address optional for master)

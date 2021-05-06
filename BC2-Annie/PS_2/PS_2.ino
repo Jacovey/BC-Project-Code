@@ -1,38 +1,37 @@
 #include <Wire.h>
 #include <Servo.h>
 
-// BC5 Pneumatic Shield Controller
+// BC2-Annie Pneumatic Shield Controller
+
 
 /*
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
- CONTROL MAPPING FOR BC5:
- ORDER    : L1 L2 L3 L4  S  A  C  P  R  BL MA
- Channel  :  1  2  3  4  5  6  7  8 10  11 12
- Paddress : 22 24 26 28 30 32 34 36  9  50 36
- Vaddress : 23 25 27 29 31 33 35 37  9 N/A 37
- Psensor  : A0 A1 A2 A3 A4 A5 A6 A7
+ CONTROL MAPPING FOR BC2-Annie: (This is all of the options, includin joystick control)
+ Order    : L1 L2 L3 L4 L5 L6 L7 L8 L9 L10 L11 L12 L13 L14  PU  WI
+ Channel  :  1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16
+ PVaddres : 22 24 28 30 32 34 36 38 40  42  46  48  50  52   9  ??
+ VVaddres : 23 25 29 31 33 35 37 39 41  43  47  49  51  53 N/A  ??
+ Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8  A9 A10 A11 A12 A13 N/A N/A
 
- NOTES FOR BC5:
+ NOTES FOR BC2-Annie: 
+ 05/05/2021: Initial setup; Channels 2p,2v,12p,12v are dead. No pressure master/vacuum because its always pressure. Winch instead of master
+ 
 */
 
-#define numChan 11              // Includes all channels (blower and master are final two channels)
-#define numValveChan 8          // # of links
-#define blowerRelay 50          // pin for blower relay
-#define linearMotor 9           // pin for linear rack motor
-#define PRESSURE_TOLERANCE 0.5  // helps slow relay bouncing (generally .1-.5 psi)
-#define MAXLINKPRESSURE 6       // max pressure in each link (generally 5)
-#define MAXPRESSURE 14.5        // max pressure of the pump (generally 14.5-15)
+#define numChan 16              // Includes all channels (blower and winch are final two channels)
+#define numValveChan 14         // # of links
+#define blowerRelay 9          // pin for blower relay
+#define PRESSURE_TOLERANCE .5   // helps slow relay bouncing (generally .1-.5 psi)
+#define MAXLINKPRESSURE 5      // max pressure in each link (generally 5)
+#define MAXPRESSURE 10          // max pressure of the pump (generally 14.5-15)
 
-#define pressureBusSensePin A15 // pin for the master pressure sensor
-
-#define debug true              // boolean to report useful serial debug messages
+#define debug true                // boolean to report useful serial debug messages
                                         
 //******************************************************CONFIGURATION******************************************************
-static int pSensPins[numValveChan]           = {A0, A1, A3, A3, A4, A5, A6, A7};// Pressure sense pins (A0-A14)
-static unsigned int pValvePins[numValveChan] = {22, 24, 26, 28, 30, 32, 34, 36};// Pressure valve pins (generally even numbered pins from 22 up)
-static unsigned int vValvePins[numValveChan] = {23, 25, 27, 29, 31, 33, 35, 37};//   Vacuum valve pins (generally odd  numbered pins from 23 up)
-static unsigned int masterVPins[2]           = {39, 38};//   Master valve pins (arranged {atmo inlet, atmo outlet})
+static int pSensPins[numValveChan]           = { A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13};// Pressure sense pins (A0-A14)
+static unsigned int pValvePins[numValveChan] = { 22, 24, 28, 30, 32, 34, 36, 38, 40, 42,  46,  48,  50,  52};// Pressure valve pins (generally even numbered pins from 22 up)
+static unsigned int vValvePins[numValveChan] = { 23, 25, 29, 31, 33, 35, 37, 39, 41, 43,  47,  49,  51,  53};//   Vacuum valve pins (generally odd  numbered pins from 23 up)
 //*************************************************************************************************************************
 
 // Initialize the state arrays
@@ -45,10 +44,6 @@ bool  pbuffbool[         numValveChan]; // stores the pressure buffer bools
 uint8_t data[numChan];      // stores most recent data received from the transmitter
 uint8_t LEDdata[numValveChan]; // stores what state the LEDs on the controller should be updated to
 
-//Init the Master pressure control
-int   mastState = 0; // State of the master pressure
-float  mastPres = 0; // Master pressure
-
 //Init the runtime variables (cuts down on new variable allocation)
 bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
 bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
@@ -57,15 +52,11 @@ int state = 103; //scanner variable that is used a lot during runtime
 
 void setup() {
   //Start Serial
-  Serial.begin(9600);
+  Serial.begin(9600);  
 
   //Initiliaze
   for (int i = 0; i < numChan; i++) {
     //Initialize the atmo valves at low
-    if(i<2){
-      pinMode(masterVPins[i], OUTPUT);
-      digitalWrite(masterVPins[i], LOW);
-    }
     if (i<numValveChan){
      //Initialize each valve pin at low
       pinMode(pValvePins[i], OUTPUT);
@@ -75,9 +66,8 @@ void setup() {
     }
     data[i]=104; // init the array so that it doesnt vent everything at startup
   }
-  pinMode(pressureBusSensePin, INPUT); // init the master pressure sensor
-  pinMode(linearMotor, OUTPUT); analogWrite(linearMotor, 127);// SETUP LINEAR RACK  
-
+  pinMode(blowerRelay, OUTPUT);
+  
   // Listen to wire 1 for Serial communications
   Wire.begin(1); // init the I2C connection on bus 1
   Wire.onReceive(handleRXCommand); // declares the function to be called when an I2C message is received
@@ -89,30 +79,30 @@ void setup() {
 
 void handleRXCommand(int howmany) {
   // Read the command into data and handle each valve consecutively (i=channel#)
-  state = 104; // temporary storage for each received command value
+  int state = 104; // temporary storage for each received command value
   for (int i = 0; i < howmany; i++) { // scan through each received command
     if (i < numChan){ // dont read more data than the number of channels?
-      state = Wire.read(); // read each command from the I2C message
+      int state = Wire.read(); // read each command from the I2C message
       data[i] = state; // store each command in data
 
-      // ---------SPECIAL HANDLING---------
+      // ---------VALVE HANDLING---------
       // KEY: 101 is "on"/"pressurize", 102 is "off"/"depressurize", 103 is a switch error, 104 is "idle"
       //      any other value is read as a value from 0-100 inclusive (for analog systems)
 
-      //Rack Control
+      //ADD ANY EXTRA SERVO CHANNELS BEFORE THE BLOWER CONTROL LIKE THIS::
+      /*
       if (i == numChan-3){
-        if  (state == 102) {analogWrite(linearMotor, 0);}//   if (debug) Serial.println("RACK IN");}
-        if  (state == 101) {analogWrite(linearMotor, 255);}// if (debug) Serial.println("RACK OUT");}
-        else {analogWrite(linearMotor, 127);}
+        if  (state == 102) {analogWrite(ANALOGPIN, 0);}
+        if  (state == 101) {analogWrite(ANALOGPIN, 255);}
+      }*/
+      
+      // BLOWER Control
+      if (i == numChan-2){// Blower is always second to last channel
+        if  (state == 102) {digitalWrite(blowerRelay, LOW);}//BLOWER OFF
+        if  (state == 101) {digitalWrite(blowerRelay, HIGH);}//BLOWER ON
       }
-      // Blower Control
-      else if (i == numChan-2){// Blower is always second to last channel
-        if  (state == 102) digitalWrite(blowerRelay, LOW);//BLOWER OFF
-        if  (state == 101) digitalWrite(blowerRelay, HIGH);//BLOWER ON
-      }
-      // Master Pressure Control
-      else if (i == numChan-1){// Master is always last channel
-        mastState = state;
+      // WINCH Control
+      else if (i == numChan-1){
       }
     }
     else if (i>=numChan) Serial.println("ERR: too many messages received");
@@ -130,13 +120,13 @@ void loop() {
   // Pressure Readings
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
     if (data[i]<=100){ // checks if this link is under proportional control (all manual control signals are > 100)
-      targetPressures[i] = (data[i]/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
+      targetPressures[i] = (state/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
       currentPressures[i] = readPress(pSensPins[i]); //Pressure Sensor reading
       pressureErrors[i] = (targetPressures[i]) - (currentPressures[i]); // get the errors
       if(pressureErrors[i] > PRESSURE_TOLERANCE || pbuffbool[i]) propFlag = true; // note if prop links need pressure
     }
   }
-  
+
   // Valve Handling
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
     state = data[i];
@@ -172,27 +162,21 @@ void loop() {
     }
     // Handling Proportional Drive
     else if (pressureErrors[i] > 0 || pbuffbool[i]) { // PRESSURIZE up to the desired pressure
-      if (mastPres>currentPressures[i]){// only actually pressurize if the master pressure would be able to help
-        if(pressureErrors[i] < 0 ){// idle if passed the desired pressure
-          pbuffbool[i]=false;// stop pressurizing past desired pressure!
-          digitalWrite(pValvePins[i], LOW);
-          digitalWrite(vValvePins[i], LOW);
-          LEDdata[i] = 1;
-        }
-        else if (pbuffbool[i] || pressureErrors[i] > PRESSURE_TOLERANCE){// activate pressure if out of tolerance
-          digitalWrite(pValvePins[i], HIGH);
-          digitalWrite(vValvePins[i], LOW);
-          pressFlag = true;
-          if (pressureErrors[i] > PRESSURE_TOLERANCE){
-            pbuffbool[i]=true; // start pressurizing to the desired pressure!
-          }
-          // if the pressure is outside of tolerance, make the LED red
-          LEDdata[i] = 0;
-        }
-      }
-      else{ // if master cant help, idle
+      if(pressureErrors[i] < 0 ){// idle if passed the desired pressure
+        pbuffbool[i]=false;// stop pressurizing past desired pressure!
         digitalWrite(pValvePins[i], LOW);
         digitalWrite(vValvePins[i], LOW);
+        LEDdata[i] = 1;
+      }
+      else if (pbuffbool[i] || pressureErrors[i] > PRESSURE_TOLERANCE){// activate pressure if out of tolerance
+        digitalWrite(pValvePins[i], HIGH);
+        digitalWrite(vValvePins[i], LOW);
+        pressFlag = true;
+        if (pressureErrors[i] > PRESSURE_TOLERANCE){
+          pbuffbool[i]=true; // start pressurizing to the desired pressure!
+        }
+        // if the pressure is outside of tolerance, make the LED red
+        LEDdata[i] = 0;
       }
     }
     else if (pressureErrors[i] < PRESSURE_TOLERANCE*-1) { // VENT
@@ -211,29 +195,6 @@ void loop() {
       LEDdata[i] = 1; // LED is green when at target in proportional control schema
     }
   }
-
-  //Master Pressure Control
-  mastPres = readPress(A15); //get current master pressure
-  if  (mastState == 101){
-    //Serial.println("MASTER VACUUM ON");
-    digitalWrite(masterVPins[1],   HIGH); // open  atmo outlet
-    if(ventFlag) digitalWrite(masterVPins[0], LOW); // pull from links if anything is venting
-    else digitalWrite(masterVPins[0], HIGH); // otherwise pull from atmo
-  }
-  else if (mastState == 102) {
-    //Serial.println("MASTER PRESSURE ON");
-    if(ventFlag) digitalWrite(masterVPins[0], LOW); // pull from links if anything is venting
-    else digitalWrite(masterVPins[0], HIGH); // otherwise pull from atmo
-    if(mastPres > MAXPRESSURE) digitalWrite(masterVPins[1], HIGH); // open pressure to atmo if its too high
-    else digitalWrite(masterVPins[1], LOW); // otherwise keep that closed and build pressure
-  }
-  else{
-    //if (mastState == 104) Serial.println("MASTER IDLE");
-    if (mastState == 103) Serial.println("ERROR:103, IDLING MASTER");
-    //CLOSE EVERYTHING
-    digitalWrite(masterVPins[0],   LOW);
-    digitalWrite(masterVPins[1],   LOW);
-  }
   
   //DISPLAY UPDATER
   if ((millis() - last_display_time) > 100) { // update every tenth of a second
@@ -250,6 +211,7 @@ float readPress(byte pin){
   return 0.01653*analogRead(pin)-.85018;
 }
 
+
 void DEBUGLOG(){
   // Print out a useful informational display about the current state of the BC
   Serial.println("|  0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 | 10 | 11 | 12 | 13 | 14 | 15 |"); Serial.print("|");
@@ -257,7 +219,7 @@ void DEBUGLOG(){
     if(i<numValveChan){
       if      (data[i]==102 )                                                        Serial.print(" M+ "); // manual pressure
       else if (data[i]==101)                                                         Serial.print(" M- "); // manual vent
-      else if (abs(pressureErrors[i]) > PRESSURE_TOLERANCE){ // proportional pressure
+      else if (abs(pressureErrors[i]) > 0){ // proportional pressure
         float pres = pressureErrors[i];
         if (pres<0) Serial.print(pres,1);
         else Serial.print(pres,2);
@@ -289,7 +251,7 @@ void DEBUGLOG(){
     float pres = readPress(pSensPins[i]);
     pres = round(pres * 10);
     pres = pres/10;
-    if (pres > 0)Serial.print(pres); // read pressure
+    if (pres > 0)Serial.print(pres,2); // read pressure
     else Serial.print("0.00");
     Serial.print("|");
   }
