@@ -7,17 +7,18 @@
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
  CONTROL MAPPING FOR BC5:
- ORDER    : L1 L2 L3 L4  S  A  C  P  R  BL MA
- Channel  :  1  2  3  4  5  6  7  8 10  11 12
- Paddress : 22 24 26 28 30 32 34 36  9  50 36
- Vaddress : 23 25 27 29 31 33 35 37  9 N/A 37
- Psensor  : A0 A1 A2 A3 A4 A5 A6 A7
+ ORDER    : L1 L2 L3 L4 L5 L6 L7 L8 L9 L10  R  BL MA
+ Channel  :  1  2  3  4  5  6  7  8  9  10 11  12 13
+ Paddress : 22 24 26 28 30 32 34 36 44  42  9  50 36
+ Vaddress : 23 25 46 29 31 33 35 37 41  43  9 N/A 37
+ Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8  A9
 
  NOTES FOR BC5:
+  08/11/2021: pins 27 and 33 went out, had to shift some fets
 */
 
-#define numChan 11              // Includes all channels (blower and master are final two channels)
-#define numValveChan 8          // # of links
+#define numChan 13              // Includes all channels (blower and master are final two channels)
+#define numValveChan 10          // # of links
 #define blowerRelay 50          // pin for blower relay
 #define linearMotor 9           // pin for linear rack motor
 #define PRESSURE_TOLERANCE 0.5  // helps slow relay bouncing (generally .1-.5 psi)
@@ -29,9 +30,9 @@
 #define debug true              // boolean to report useful serial debug messages
                                         
 //******************************************************CONFIGURATION******************************************************
-static int pSensPins[numValveChan]           = {A0, A1, A3, A3, A4, A5, A6, A7};// Pressure sense pins (A0-A14)
-static unsigned int pValvePins[numValveChan] = {22, 24, 26, 28, 30, 32, 34, 36};// Pressure valve pins (generally even numbered pins from 22 up)
-static unsigned int vValvePins[numValveChan] = {23, 25, 27, 29, 31, 33, 35, 37};//   Vacuum valve pins (generally odd  numbered pins from 23 up)
+static int pSensPins[numValveChan]           = {A0, A1, A3, A3, A4, A5, A6, A7, A8, A9};// Pressure sense pins (A0-A14)
+static unsigned int pValvePins[numValveChan] = {22, 24, 26, 28, 30, 32, 34, 36, 44, 42};// Pressure valve pins (generally even numbered pins from 22 up)
+static unsigned int vValvePins[numValveChan] = {23, 25, 46, 29, 31, 47, 35, 37, 41, 43};//   Vacuum valve pins (generally odd  numbered pins from 23 up)
 static unsigned int masterVPins[2]           = {39, 38};//   Master valve pins (arranged {atmo inlet, atmo outlet})
 //*************************************************************************************************************************
 
@@ -164,6 +165,7 @@ void loop() {
       digitalWrite(pValvePins[i], LOW);
       digitalWrite(vValvePins[i], HIGH);
       LEDdata[i]=4;// manual vent should be blinking green
+      ventFlag=true; // something is venting
     }
     else if (state == 103) { // SWITCH ERROR
       Serial.print("ERROR:103, IDLING CH"); Serial.print(i); Serial.println();
@@ -208,6 +210,7 @@ void loop() {
       // if the pressure is outside of tolerance, make the LED red
       LEDdata[i] = 0; // LED is red when not at target in proportional control schema
       pbuffbool[i]=false;
+      ventFlag=true; // something is venting
     }
     else { // IDLE
       // stop flow in and out of link

@@ -1,12 +1,13 @@
-// BC5 Receiver Code
+// BC1 Receiver Code
 
 #include <RadioHead.h> 
 #include <Wire.h>
+#include <RHReliableDatagram.h>
 #include <RH_NRF24.h>
 #include <SPI.h>
 
 // Radio Software Setup
-#define CHANNEL      100 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+#define CHANNEL      25 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
                                                        // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
@@ -19,17 +20,21 @@
 #define LED_RED_2     9
 
 // Initiliaze radio driver and manager
-RH_NRF24 driver(2);
+RH_NRF24 driver;
 
 // Declare the input data buffer and the output LEDdata buffer
 uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t LEDdata[RH_NRF24_MAX_MESSAGE_LEN];
 
+// delare blinker bool
+bool blinkBool = false;
+
+//Debug bool
 bool debug = true;
 
 void setup() {
   //Serial startup
-  Serial.begin(9600);
+  if (debug) Serial.begin(9600);
 
   //LED pin init
   pinMode(LED_GREEN_1, OUTPUT);
@@ -43,13 +48,13 @@ void setup() {
 
   //Check if radio failed to initialize
   if (!driver.init()) {
-    Serial.println("RX radio initialization failed");
+    if (debug) Serial.println("RX radio initialization failed");
     digitalWrite(LED_RED_2, HIGH); // red failed init
   }
   //Communicate radio readiness
   else {
-    Serial.println("RX radio initialized");
-    Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
+    if (debug) Serial.println("RX radio initialized");
+    if (debug) Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
     
     //Set the config of the radio driver and manager
     driver.setChannel(CHANNEL);
@@ -81,10 +86,12 @@ void loop(){
     driver.send(LEDdata, sizeof(LEDdata));
     driver.waitPacketSent(); // wait till its done sending
     //print out the received info in buffer
-    for (int i=0; i<len;i++){ // print out received data
-      Serial.print(buf[i]); Serial.print(" ");
+    if (debug){
+      for (int i=0; i<len;i++){ // print out received data
+        Serial.print(buf[i]); Serial.print(" ");
+      }
+      Serial.println();
     }
-    Serial.println();
   }
 }
 
@@ -95,7 +102,7 @@ void LEDDataRead(int howmany){  // CALLED WHEN I2C MESSAGE ARRIVES from BC
 }
 
 void blinker(byte pin){ // blink an led
-  digitalWrite(pin, HIGH);
-  delay(10);
-  digitalWrite(pin, LOW);
+  blinkBool = !blinkBool;
+  if (blinkBool) digitalWrite(pin, HIGH);
+  else digitalWrite(pin, LOW);
 }

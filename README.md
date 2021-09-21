@@ -7,8 +7,8 @@ TX  : 1 3 5 7  9
 RX  : 2 4 6 8 10
 
 NRF24 Channels
-BC# : 1 2 3 4  5 
-CH  : 1 2 3 4  5
+BC# :  1  2  3   4   5
+CH  : 25 50 75 100 125
 
 All possible TX pins:
 

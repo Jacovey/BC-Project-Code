@@ -49,10 +49,11 @@ uint8_t data[numChan];
 bool debug = false;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67};
-const uint8_t vSwitchPins[ numChan] =   {12, 10,  9,  7,  5, 14, 16, 18, 20, 22, 25, 26, 29, 31, 35, 33};
-const uint8_t pSwitchPins[ numChan] =   {13, 11,  8,  6,  4, 15, 17, 19, 21, 23, 24, 27, 28, 30, 34, 32};
-const uint8_t LEDpins[numValveChan] =   {48, 49, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36};
+//                                       FT  ML  HP  TFB  LLB  FR  MP  SP  TP  BB  B2  B3  B1  CO
+const uint8_t potPINS[numValveChan] =   {54, 55, 56,  57,  58, 59, 60, 61, 62, 63, 64, 65, 66, 67};
+const uint8_t vSwitchPins[ numChan] =   {12, 10,  9,   7,   5, 14, 16, 18, 20, 22, 25, 26, 29, 31, 35, 33};
+const uint8_t pSwitchPins[ numChan] =   {13, 11,  8,   6,   4, 15, 17, 19, 21, 23, 24, 27, 28, 30, 34, 32};
+const uint8_t LEDpins[numValveChan] =   {48, 49, 47,  46,  45, 44, 43, 42, 41, 40, 39, 38, 37, 36};
 // *******************************************************************************************************************
 
 //Initialize the readings

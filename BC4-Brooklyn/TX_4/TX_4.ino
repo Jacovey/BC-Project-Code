@@ -45,7 +45,7 @@ uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 uint8_t data[numChan];
 
 //Init Debug
-bool debug = false;
+bool debug = true;
 
 // ******************* CONFIGURATION *********************************************************************************
 const uint8_t potPINS[numValveChan] =   {54, 55, 56, 57, 58, 59, 60, 62, 63, 64, 65}; // generally 54 and up

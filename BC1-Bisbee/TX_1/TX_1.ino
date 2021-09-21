@@ -1,29 +1,31 @@
 #include <RadioHead.h>
+#include <RHReliableDatagram.h>
 #include <RH_NRF24.h>
 #include <SPI.h>
 
-// BC5 Transmitter code
+// BC1 Transmitter code
 
 /*
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
- CONTROL MAPPING FOR BC5: (Please try and keep this legible, these are temp values)
- ORDER    : L1 L2 L3 L4 L5 L6 L7 L8 L9 L10  R BL MA
- Channel  :  1  2  3  4  5  6  7  8  9  10 11 12 13
- PSaddy   : 13 11  8  6  4 15 17 19 21  23 31 34 32
- VSaddy   : 12 10  9  7  5 14 16 18 20  22 30 35 33
- POTaddy  : 54 55 56 57 58 59 60 61 62  63
- LED      : 48 49 47 46 45 44 43 42 41  40
+ CONTROL MAPPING FOR BC1: (This is all of the options, includin joystick control)
+ Channel  :  1  2  3  4  5  6  7  8  9 10 11 12 13 14 17 18
+ Order    :                                           PU MA
+ PSaddy   :  4  6  8 11 13 15 17 19 21 23 24 27 28 30 34 32
+ VSaddy   :  5  7  9 10 12 14 16 18 20 22 25 26 29 31 35 33
+ POTaddy  : 54 55 56 57 58 59 60 61 62 63 64 65 66 67
+ LED      : 48 49 47 46 45 44 43 42 41 40 39 38
 
- NOTES FOR BC5: 
+ NOTES FOR BC1: 
+ 08/05/2021: INTIAL SETUP
 */
 
 // Channel informations
-#define numChan      13 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
-#define numValveChan 10 // number of exclusivly valve channels
+#define numChan      15 // INCLUDING BLOWER, MASTER, AND ANY JOYSTICK
+#define numValveChan 13 // number of exclusivly valve channels
 
 // Radio Software Setup
-#define CHANNEL      100 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
+#define CHANNEL      25 //(from 0-125) Note: be careful to space these out and match between Tx and Rx,
                                                        // otherwise they can interfere with eachother
 #define TX_POWER RH_NRF24::TransmitPowerm18dBm // dont need to change this, but you could
 #define DATARATE RH_NRF24::DataRate1Mbps // dont need to change this but you could
@@ -46,11 +48,10 @@ uint8_t data[numChan];
 bool debug = true;
 
 // ******************* CONFIGURATION *********************************************************************************
-const uint8_t potPINS[numValveChan] =   { 54, 55, 56, 57, 58, 59, 60, 61, 62, 63}; // generally 54 and up
-const uint8_t vSwitchPins[ numChan] =   { 12, 10,  9,  7,  5, 14, 16, 18, 20, 22, 30, 35, 33}; // who tf knows, use the config script
-const uint8_t pSwitchPins[ numChan] =   { 13, 11,  8,  6,  4, 15, 17, 19, 21, 23, 31, 34, 32}; // who tf knows, use the config script
-
-const uint8_t LEDpins[numValveChan] =   { 48, 49, 47, 46, 45, 44, 43, 42, 41, 40}; // generally 48 and down to around 33
+const uint8_t potPINS[numValveChan] =   { 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66};
+const uint8_t vSwitchPins[ numChan] =   { 12, 10,  9,  7,  5, 14, 16, 18, 20, 22, 25, 26, 29, 35, 33};
+const uint8_t pSwitchPins[ numChan] =   { 13, 11,  8,  6,  4, 15, 17, 19, 21, 23, 24, 27, 28, 34, 32};
+const uint8_t LEDpins[numValveChan] =   { 48, 49, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38};
 // *******************************************************************************************************************
 
 //Initialize the readings
@@ -82,22 +83,22 @@ void setup() {
   }
 
   // Init the Serial
-  Serial.begin(9600);
+  if (debug) Serial.begin(9600);
 
   // See if radio init correctly
   if (!driver.init()) {
-    Serial.println("TX init failed");
+    if (debug) Serial.println("TX init failed");
     while(1);
   }
   else {
-    Serial.println("TX radio initialized");
-    Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
+    if (debug) Serial.println("TX radio initialized");
+    if (debug) Serial.print("On Channel: "); Serial.println(CHANNEL); Serial.println();
     driver.setChannel(CHANNEL);
     driver.setRF(DATARATE, TX_POWER);
   }
   // communicate its ready and then chill for a bit
-  Serial.println("BCcontrollerTX_5 Ready.");
-  Serial.println();
+  if (debug) Serial.println("BCcontrollerTX Ready.");
+  if (debug) Serial.println();
   delay(500);
 }
 
@@ -107,7 +108,7 @@ void loop() {
   // READING CONTROLS
   // Note: the last two channels are blower and master pressure, but they are handled by the reciever
   for (int i = 0; i < numChan; i++) {
-    if (i < numChan-3) { // Valves and proportional Utility channels only
+    if (i < numChan-2) { // Valves and Utility channels only
       // Read pots
       potReadings[i] = 100 - analogRead(potPINS[i]) * (100.0 / 1023.0); // interprets pot signal from 0 to 100
 
@@ -142,11 +143,12 @@ void loop() {
   // transmit and receive radio data and display data
   //Send data to RX
   driver.send(data, sizeof(data));
-  driver.waitPacketSent();
-  if (driver.waitAvailableTimeout(100)) {
+  driver.waitPacketSent(); // wait until it's sent fully
+  if (driver.waitAvailableTimeout(100)) {// wait for an available message
     
     //initialize some variables to point to
     uint8_t len = sizeof(buf);
+    uint8_t from;
 
     // Now attempt to pickup a reply from the receiver
     driver.recv(buf, &len);
@@ -159,7 +161,7 @@ void loop() {
       Serial.println();
     }
   }
-  //else{Serial.println("FAILED RESPONSE");}
+  //else{Serial.println("FAILED RESPONSE");}//get ready for a lot of failed responses, its RC and signals fail often
 
   // if debug is on, print out what the TX just tried to send
   if (debug){

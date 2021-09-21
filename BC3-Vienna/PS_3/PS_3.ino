@@ -15,20 +15,21 @@
  Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10      A15
 
  NOTES FOR BC3: 
- 3/1/2020: No Feedback on pig or L4, A2 pressure sensors is dead
- 4/26/2020: Replaced shield with less broken one, noted updated
+ 3/1/2021: No Feedback on pig or L4, A2 pressure sensors is dead
+ 4/26/2021: Replaced shield with less broken one, noted updated
+ 5/13/2021: Convert to full manual mode (slightly different than template)
 */
 
 #define numChan 13                // Includes all channels (blower and master are final two channels)
 #define numValveChan 11           // # of links
-#define blowerRelay 50            // pin for blower relay
-#define PRESSURE_TOLERANCE .4     // helps slow relay bouncing (generally .1-.5 psi)
+#define blowerRelay 10            // pin for blower relay
+#define PRESSURE_TOLERANCE .5     // helps slow relay bouncing (generally .1-.5 psi)
 #define MAXLINKPRESSURE 8         // max pressure in each link (generally 5)
 #define MAXPRESSURE 14          // max pressure of the pump (generally 14.5-15)
 
 #define pressureBusSensePin A15  // pin for the master pressure sensor
 
-#define debug true                // boolean to report useful serial debug messages
+#define debug false                // boolean to report useful serial debug messages
                                         
 //******************************************************CONFIGURATION******************************************************
 static int pSensPins[numValveChan]           = {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10};// Pressure sense pins (A0-A14)
@@ -54,7 +55,6 @@ float  mastPres = 0; // Master pressure
 //Init the runtime variables (cuts down on new variable allocation)
 bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
 bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
-bool propFlag = false; // keep track of whether any proportional controled link needs air
 int state = 103; //scanner variable that is used a lot during runtime
 
 void setup() {
@@ -78,6 +78,7 @@ void setup() {
     data[i]=104; // init the array so that it doesnt vent everything at startup
   }
   pinMode(pressureBusSensePin, INPUT); // init the master pressure sensor
+  pinMode(blowerRelay, OUTPUT); //init blower relay (not always neccesary, but for standard setup it is)
   
   // Listen to wire 1 for Serial communications
   Wire.begin(1); // init the I2C connection on bus 1
@@ -120,7 +121,6 @@ void loop() {
   // Global States resetting
   ventFlag = false;
   pressFlag = false;
-  propFlag = false;
 
   // Pressure Readings
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
@@ -128,7 +128,6 @@ void loop() {
       targetPressures[i] = (data[i]/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
       currentPressures[i] = readPress(pSensPins[i]); //Pressure Sensor reading
       pressureErrors[i] = (targetPressures[i]) - (currentPressures[i]); // get the errors
-      //if(pressureErrors[i] > PRESSURE_TOLERANCE || pbuffbool[i]) propFlag = true; // note if prop links need pressure
     }
   }
   
@@ -138,21 +137,15 @@ void loop() {
 
     //Handling Manual Drive
     if (state == 102) { // MANUAL PRESSURIZE
-      if (!propFlag){// only pressurize if the prop links dont need it
-        digitalWrite(pValvePins[i], HIGH);
-        digitalWrite(vValvePins[i], LOW);
-      }
-      else {// otherwise idle
-        digitalWrite(pValvePins[i], LOW);
-        digitalWrite(vValvePins[i], LOW);
-      }
+      digitalWrite(pValvePins[i], HIGH);//open inlet
+      digitalWrite(vValvePins[i], LOW);//close outlet
       if (currentPressures[i]<MAXLINKPRESSURE){ LEDdata[i]=0; pressFlag = true;}// if below max, solid red
       else                                    { LEDdata[i]=3; pressFlag = true;}// if passed max pressure, blink red as a warning
     }
     else if (state == 101) { // MANUAL VENT
       digitalWrite(pValvePins[i], LOW);
       digitalWrite(vValvePins[i], HIGH);
-      LEDdata[i]=4;// manual vent should be blinking green
+      LEDdata[i]=4;// manual vent blinks green
     }
     else if (state == 103) { // SWITCH ERROR
       Serial.print("ERROR:103, IDLING CH"); Serial.print(i); Serial.println();
@@ -180,13 +173,18 @@ void loop() {
           pressFlag = true;
           if (pressureErrors[i] > PRESSURE_TOLERANCE){
             pbuffbool[i]=true; // start pressurizing to the desired pressure!
+            LEDdata[i] = 3; // if the pressure is outside of tolerance, make the LED blink red as a warning
           }
-          // if the pressure is outside of tolerance, make the LED red
-          LEDdata[i] = 0;
+          else{
+            LEDdata[i] = 0; // while in tolerance but not at value yet, make LED red
+          }
         }
       }
       else{ // if master cant help, idle
-        digitalWrite(pValvePins[i], LOW);
+        if(pressureErrors[i] > 0 ) LEDdata[i]=0; //communicate link WANTS to pressurize if it could
+        else if (pbuffbool[i] || pressureErrors[i] > PRESSURE_TOLERANCE) LEDdata[i] = 3;//communicate link REALLY WANTS to pressurize if it could
+        else {LEDdata[i]=1;} // green if its satisfied TEMP TEMP
+        digitalWrite(pValvePins[i], LOW);// idle
         digitalWrite(vValvePins[i], LOW);
       }
     }

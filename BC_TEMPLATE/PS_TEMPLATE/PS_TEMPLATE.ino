@@ -52,7 +52,6 @@ float  mastPres = 0; // Master pressure
 //Init the runtime variables (cuts down on new variable allocation)
 bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
 bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
-bool propFlag = false; // keep track of whether any proportional controled link needs air
 int state = 103; //scanner variable that is used a lot during runtime
 
 void setup() {
@@ -76,6 +75,8 @@ void setup() {
     data[i]=104; // init the array so that it doesnt vent everything at startup
   }
   pinMode(pressureBusSensePin, INPUT); // init the master pressure sensor
+  pinMode(blowerRelay, OUTPUT); //init blower relay (not always neccesary, but for standard setup it is)
+  
 
   // Listen to wire 1 for Serial communications
   Wire.begin(1); // init the I2C connection on bus 1
@@ -125,7 +126,6 @@ void loop() {
   // Global States resetting
   ventFlag = false;
   pressFlag = false;
-  propFlag = false;
 
   // Pressure Readings
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
@@ -133,7 +133,6 @@ void loop() {
       targetPressures[i] = (state/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
       currentPressures[i] = readPress(pSensPins[i]); //Pressure Sensor reading
       pressureErrors[i] = (targetPressures[i]) - (currentPressures[i]); // get the errors
-      if(pressureErrors[i] > PRESSURE_TOLERANCE || pbuffbool[i]) propFlag = true; // note if prop links need pressure
     }
   }
 
@@ -143,14 +142,8 @@ void loop() {
 
     //Handling Manual Drive
     if (state == 102) { // MANUAL PRESSURIZE
-      if (!propFlag){// only pressurize if the prop links dont need it
-        digitalWrite(pValvePins[i], HIGH);
-        digitalWrite(vValvePins[i], LOW);
-      }
-      else {// otherwise idle
-        digitalWrite(pValvePins[i], LOW);
-        digitalWrite(vValvePins[i], LOW);
-      }
+      digitalWrite(pValvePins[i], HIGH);//open inlet
+      digitalWrite(vValvePins[i], LOW);//close outlet
       if (currentPressures[i]<MAXLINKPRESSURE){ LEDdata[i]=0; pressFlag = true;}// if below max, solid red
       else                                    { LEDdata[i]=3; pressFlag = true;}// if passed max pressure, blink red as a warning
     }
@@ -185,13 +178,17 @@ void loop() {
           pressFlag = true;
           if (pressureErrors[i] > PRESSURE_TOLERANCE){
             pbuffbool[i]=true; // start pressurizing to the desired pressure!
+            LEDdata[i] = 3; // if the pressure is outside of tolerance, make the LED blink red as a warning
           }
-          // if the pressure is outside of tolerance, make the LED red
-          LEDdata[i] = 0;
+          else{
+            LEDdata[i] = 0; // while in tolerance but not at value yet, make LED red
+          }
         }
       }
       else{ // if master cant help, idle
-        digitalWrite(pValvePins[i], LOW);
+        if(pressureErrors[i] > 0 ) LEDdata[i]=0; //communicate link WANTS to pressurize if it could
+        if (pbuffbool[i] || pressureErrors[i] > PRESSURE_TOLERANCE) LEDdata[i] = 3;//communicate link REALLY WANTS to pressurize if it could
+        digitalWrite(pValvePins[i], LOW);// idle
         digitalWrite(vValvePins[i], LOW);
       }
     }
