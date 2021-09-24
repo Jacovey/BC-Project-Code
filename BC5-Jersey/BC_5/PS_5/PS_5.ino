@@ -53,7 +53,6 @@ float  mastPres = 0; // Master pressure
 //Init the runtime variables (cuts down on new variable allocation)
 bool ventFlag = false; // keep track of whether anything is venting, or whether we need to pull from atmo
 bool pressFlag = false; // keep track of whether anything is pressurizing, or whether we can just vent the motor
-bool propFlag = false; // keep track of whether any proportional controled link needs air
 int state = 103; //scanner variable that is used a lot during runtime
 
 void setup() {
@@ -132,7 +131,6 @@ void loop() {
   // Global States resetting
   ventFlag = false;
   pressFlag = false;
-  propFlag = false;
 
   // Pressure Readings
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
@@ -140,7 +138,6 @@ void loop() {
       targetPressures[i] = (data[i]/100.0)*MAXLINKPRESSURE; //map proportional control to a percent of the max
       currentPressures[i] = readPress(pSensPins[i]); //Pressure Sensor reading
       pressureErrors[i] = (targetPressures[i]) - (currentPressures[i]); // get the errors
-      if(pressureErrors[i] > PRESSURE_TOLERANCE || pbuffbool[i]) propFlag = true; // note if prop links need pressure
     }
   }
   
@@ -150,14 +147,8 @@ void loop() {
 
     //Handling Manual Drive
     if (state == 102) { // MANUAL PRESSURIZE
-      if (!propFlag){// only pressurize if the prop links dont need it
-        digitalWrite(pValvePins[i], HIGH);
-        digitalWrite(vValvePins[i], LOW);
-      }
-      else {// otherwise idle
-        digitalWrite(pValvePins[i], LOW);
-        digitalWrite(vValvePins[i], LOW);
-      }
+      digitalWrite(pValvePins[i], HIGH);
+      digitalWrite(vValvePins[i], LOW);
       if (currentPressures[i]<MAXLINKPRESSURE){ LEDdata[i]=0; pressFlag = true;}// if below max, solid red
       else                                    { LEDdata[i]=3; pressFlag = true;}// if passed max pressure, blink red as a warning
     }
