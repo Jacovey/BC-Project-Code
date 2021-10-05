@@ -280,7 +280,7 @@ void DEBUGLOG(){
       Serial.print("|");
     }
   }
-  Serial.print("MAS"); Serial.println(); Serial.print("|");
+  Serial.println(); Serial.print("|");
   
   for (int i=0;i<16;i++){ // Current pressure
     float pres = readPress(pSensPins[i]);
@@ -290,7 +290,7 @@ void DEBUGLOG(){
     else Serial.print("0.00");
     Serial.print("|");
   }
-  Serial.print((round(masPres*10)/10),2);
+  Serial.print("MASTER PRESSURE: "); Serial.print(mastPres); Serial.println();
   
   Serial.println();
   Serial.println();
