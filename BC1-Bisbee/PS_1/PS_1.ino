@@ -6,13 +6,7 @@
 /*
  RC-STYLE MULTICHANNEL COMMUNICATION IMPLEMENTATION
 
- CONTROL MAPPING FOR BC1: (Please try and keep this legible, these are temp values)
- ORDER    : BH LL LB FL FR MB HP MF TB HF  BR  CO  SP  BL  WI
- Channel  :  1  2  3  4  5  6  7  8  9 10  11  12  13  14  15
- PVaddres : 22 24 26 28 30 32 34 36 38 40  42  44  46   5   2
- VVaddres : 23 25 27 29 31 33 35 37 39 41  43  45  47       3
- Psensor  : A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 
-
+ CONTROL MAPPING FOR BC1: (Please try and keep this legible)
  ORDER    : BH LL  LB FL FR MB  HP MF TB LI  BR CO SP BL WI
  Channel  :  1  2   3  4  5  6   7  8  9 10  11 12 13 14 15
  PVaddres : 24 30  46 22 36 26  42 34 28 38  44 32 40  5  2
@@ -286,7 +280,7 @@ void DEBUGLOG(){
       Serial.print("|");
     }
   }
-  Serial.println(); Serial.print("|");
+  Serial.print("MAS"); Serial.println(); Serial.print("|");
   
   for (int i=0;i<16;i++){ // Current pressure
     float pres = readPress(pSensPins[i]);
@@ -296,6 +290,8 @@ void DEBUGLOG(){
     else Serial.print("0.00");
     Serial.print("|");
   }
+  Serial.print((round(masPres*10)/10),2);
+  
   Serial.println();
   Serial.println();
   Serial.println();
