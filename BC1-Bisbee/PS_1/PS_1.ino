@@ -161,7 +161,6 @@ void loop() {
   // Valve Handling
   for (int i = 0; i<numValveChan; i++) { // scan through each valve channel
     state = data[i];
-
     //Handling Manual Drive
     if (state == 102) { // MANUAL PRESSURIZE
       digitalWrite(pValvePins[i], HIGH);//open inlet
@@ -282,7 +281,7 @@ void DEBUGLOG(){
   }
   Serial.println(); Serial.print("|");
   
-  for (int i=0;i<16;i++){ // Current pressure
+  for (int i=0;i<numValveChan;i++){ // Current pressure
     float pres = readPress(pSensPins[i]);
     pres = round(pres * 10);
     pres = pres/10;
