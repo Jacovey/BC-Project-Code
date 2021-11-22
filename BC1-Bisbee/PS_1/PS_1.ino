@@ -30,7 +30,7 @@
 #define winchExtend 2
 #define winchRetract 3
 
-#define debug false                // boolean to report useful serial debug messages
+#define debug true                // boolean to report useful serial debug messages
                                         
 //******************************************************CONFIGURATION******************************************************
 static int pSensPins[numValveChan]           = { A1, A4, A12, A0, A7, A2, A10, A6, A3, A8, A11, A5, A9};// Pressure sense pins (A0-A14)
